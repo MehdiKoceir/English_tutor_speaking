@@ -1,0 +1,6 @@
+{
+  "name": "English Tutor",
+  "description": "Practice English conversation with an intelligent tutor. Get instant corrections, voice-to-text, and detailed explanations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
