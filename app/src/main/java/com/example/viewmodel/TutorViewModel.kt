@@ -379,6 +379,46 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateSessionTopic(sessionId: String, topic: String) {
+        viewModelScope.launch {
+            repository.updateSessionTopic(sessionId, topic)
+            if (_currentSession.value?.id == sessionId) {
+                _currentSession.value = _currentSession.value?.copy(topic = topic)
+            }
+        }
+    }
+
+    fun deleteMessage(messageId: String) {
+        viewModelScope.launch {
+            repository.deleteMessage(messageId)
+        }
+    }
+
+    fun updateMessage(messageId: String, text: String, correctedText: String?) {
+        viewModelScope.launch {
+            repository.updateMessage(messageId, text, correctedText)
+        }
+    }
+
+    fun resetStreak() {
+        viewModelScope.launch {
+            val updatedStreak = DailyStreakRecord(id = 1, currentStreak = 0, lastCompletedDate = "", longestStreak = 0)
+            repository.insertDailyStreak(updatedStreak)
+            _dailyStreak.value = updatedStreak
+        }
+    }
+
+    fun setStreak(streakVal: Int) {
+        viewModelScope.launch {
+            val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+            val existing = repository.getDailyStreak()
+            val longest = maxOf(existing?.longestStreak ?: 0, streakVal)
+            val updatedStreak = DailyStreakRecord(id = 1, currentStreak = streakVal, lastCompletedDate = today, longestStreak = longest)
+            repository.insertDailyStreak(updatedStreak)
+            _dailyStreak.value = updatedStreak
+        }
+    }
+
     fun fetchWordDefinition(word: String, sentence: String, onResult: (String) -> Unit) {
         viewModelScope.launch {
             val definition = apiService.getWordDefinition(word, sentence)

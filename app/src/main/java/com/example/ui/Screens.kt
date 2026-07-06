@@ -914,6 +914,11 @@ fun ChatScreen(
     var showWordSelectDialog by remember { mutableStateOf(false) }
     var selectedMessageText by remember { mutableStateOf("") }
 
+    var showChatOptionsDialog by remember { mutableStateOf(false) }
+    var selectedMessage by remember { mutableStateOf<ChatMessage?>(null) }
+    var showEditMessageDialog by remember { mutableStateOf(false) }
+    var editMessageText by remember { mutableStateOf("") }
+
     var elapsedSeconds by remember { mutableStateOf(0) }
     LaunchedEffect(session?.id) {
         elapsedSeconds = 0
@@ -1066,9 +1071,9 @@ fun ChatScreen(
                     MessageBubble(
                         message = message,
                         onSpeak = onSpeak,
-                        onLongClick = { text ->
-                            selectedMessageText = text
-                            showWordSelectDialog = true
+                        onLongClick = { msg ->
+                            selectedMessage = msg
+                            showChatOptionsDialog = true
                         },
                         onPracticePronunciation = onPracticePronunciation
                     )
@@ -1307,6 +1312,158 @@ fun ChatScreen(
             dismissButton = {}
         )
     }
+
+    // Chat Options Modal on long-press
+    if (showChatOptionsDialog && selectedMessage != null) {
+        val msg = selectedMessage!!
+        AlertDialog(
+            onDismissRequest = { showChatOptionsDialog = false },
+            title = {
+                Text(
+                    text = "Message Actions",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Choose an action for this message:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    // Option 1: Save Word as Flashcard
+                    ListItem(
+                        headlineContent = { Text("Save Word as Flashcard") },
+                        supportingContent = { Text("Select a word to add to your word bank") },
+                        leadingContent = {
+                            Icon(Icons.Default.School, contentDescription = "Flashcard", tint = Color(0xFF8B5CF6))
+                        },
+                        modifier = Modifier
+                            .clickable {
+                                selectedMessageText = msg.text
+                                showChatOptionsDialog = false
+                                showWordSelectDialog = true
+                            }
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+
+                    // Option 2: Practice Pronunciation
+                    ListItem(
+                        headlineContent = { Text("Practice Pronunciation") },
+                        supportingContent = { Text("Speak and compare with the TTS model") },
+                        leadingContent = {
+                            Icon(Icons.Default.Mic, contentDescription = "Practice", tint = Color(0xFF10B981))
+                        },
+                        modifier = Modifier
+                            .clickable {
+                                showChatOptionsDialog = false
+                                onPracticePronunciation(msg.text)
+                            }
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+
+                    // Option 3: Edit Message
+                    ListItem(
+                        headlineContent = { Text("Edit Message Text") },
+                        supportingContent = { Text("Modify the text stored in your database") },
+                        leadingContent = {
+                            Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Color(0xFFF59E0B))
+                        },
+                        modifier = Modifier
+                            .clickable {
+                                editMessageText = msg.text
+                                showChatOptionsDialog = false
+                                showEditMessageDialog = true
+                            }
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+
+                    // Option 4: Delete Message
+                    ListItem(
+                        headlineContent = { Text("Delete Message", color = MaterialTheme.colorScheme.error) },
+                        supportingContent = { Text("Remove this message from the history", color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)) },
+                        leadingContent = {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                        },
+                        modifier = Modifier
+                            .clickable {
+                                showChatOptionsDialog = false
+                                viewModel.deleteMessage(msg.id)
+                                android.widget.Toast.makeText(context, "Message deleted from database!", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showChatOptionsDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Edit Message Dialog
+    if (showEditMessageDialog && selectedMessage != null) {
+        val msg = selectedMessage!!
+        AlertDialog(
+            onDismissRequest = { showEditMessageDialog = false },
+            title = {
+                Text(
+                    text = "Edit Message Text",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Modify this message's text. This will update your conversation database entry directly.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = editMessageText,
+                        onValueChange = { editMessageText = it },
+                        modifier = Modifier.fillMaxWidth().testTag("edit_message_input"),
+                        label = { Text("Message Content") },
+                        maxLines = 6,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF8B5CF6)
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (editMessageText.trim().isNotEmpty()) {
+                            viewModel.updateMessage(msg.id, editMessageText.trim(), msg.correctedText)
+                            showEditMessageDialog = false
+                            android.widget.Toast.makeText(context, "Message updated in database!", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6))
+                ) {
+                    Text("Save Changes", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditMessageDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -1314,7 +1471,7 @@ fun ChatScreen(
 fun MessageBubble(
     message: ChatMessage,
     onSpeak: (String) -> Unit,
-    onLongClick: (String) -> Unit,
+    onLongClick: (ChatMessage) -> Unit,
     onPracticePronunciation: (String) -> Unit
 ) {
     val isUser = message.sender == "user"
@@ -1369,7 +1526,7 @@ fun MessageBubble(
                     .widthIn(max = 280.dp)
                     .combinedClickable(
                         onClick = { if (!isUser) { onSpeak(message.text) } },
-                        onLongClick = { onLongClick(message.text) }
+                        onLongClick = { onLongClick(message) }
                     )
             ) {
                 Box(
@@ -1571,6 +1728,9 @@ fun HistoryScreen(
     val sdf = SimpleDateFormat("MMM dd, yyyy - hh:mm a", Locale.getDefault())
     val isDark = isSystemInDarkTheme()
 
+    var sessionToEdit by remember { mutableStateOf<ConversationSession?>(null) }
+    var editTopicText by remember { mutableStateOf("") }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -1712,22 +1872,92 @@ fun HistoryScreen(
                                 }
                             }
 
-                            // Delete button
-                            IconButton(
-                                onClick = { viewModel.deleteSession(session.id) },
-                                modifier = Modifier.testTag("delete_session_${session.id}")
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Delete conversation",
-                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
-                                )
+                                // Edit Topic button
+                                IconButton(
+                                    onClick = {
+                                        sessionToEdit = session
+                                        editTopicText = session.topic
+                                    },
+                                    modifier = Modifier.testTag("edit_session_topic_${session.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Edit topic",
+                                        tint = Color(0xFFF59E0B)
+                                    )
+                                }
+
+                                // Delete button
+                                IconButton(
+                                    onClick = { viewModel.deleteSession(session.id) },
+                                    modifier = Modifier.testTag("delete_session_${session.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete conversation",
+                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    if (sessionToEdit != null) {
+        val s = sessionToEdit!!
+        AlertDialog(
+            onDismissRequest = { sessionToEdit = null },
+            title = {
+                Text(
+                    text = "Rename Session Topic",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Change the title/topic for this conversation practice session:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = editTopicText,
+                        onValueChange = { editTopicText = it },
+                        modifier = Modifier.fillMaxWidth().testTag("edit_session_topic_input"),
+                        label = { Text("Topic Name") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF8B5CF6)
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (editTopicText.trim().isNotEmpty()) {
+                            viewModel.updateSessionTopic(s.id, editTopicText.trim())
+                            sessionToEdit = null
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6))
+                ) {
+                    Text("Rename", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { sessionToEdit = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
@@ -1889,6 +2119,75 @@ fun SettingsScreen(
                                     checkedTrackColor = Color(0xFF8B5CF6)
                                 )
                             )
+                        }
+                    }
+                }
+            }
+
+            // Daily Streak Management Card
+            item {
+                val dailyStreak by viewModel.dailyStreak.collectAsState()
+                val streakVal = dailyStreak?.currentStreak ?: 0
+                val longestStreak = dailyStreak?.longestStreak ?: 0
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, if (isDark) Color(0x1AFFFFFF) else Color(0x99FFFFFF))
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            text = "Daily Streak Manager",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color(0xFF8B5CF6)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Manage your database streak values directly. Handily adjust or reset your streaks if needed.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Current Streak", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+                                Text("$streakVal days", style = MaterialTheme.typography.titleLarge.copy(color = Color(0xFFF59E0B), fontWeight = FontWeight.Bold))
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("Longest Streak", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+                                Text("$longestStreak days", style = MaterialTheme.typography.titleMedium.copy(color = Color(0xFF10B981), fontWeight = FontWeight.Bold))
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { viewModel.resetStreak() },
+                                modifier = Modifier.weight(1f).testTag("reset_streak_button"),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                            ) {
+                                Text("Reset Streak", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                            }
+
+                            Button(
+                                onClick = { viewModel.setStreak(streakVal + 1) },
+                                modifier = Modifier.weight(1f).testTag("increment_streak_button"),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6))
+                            ) {
+                                Text("Add +1 Day", fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -2185,6 +2484,13 @@ fun VocabularyScreen(
     var selectedOptionIndex by remember { mutableStateOf<Int?>(null) }
     var quizScore by remember { mutableStateOf(0) }
     var quizFinished by remember { mutableStateOf(false) }
+
+    // Edit Vocabulary States
+    var showEditWordDialog by remember { mutableStateOf(false) }
+    var wordToEdit by remember { mutableStateOf<VocabularyWord?>(null) }
+    var editWordValue by remember { mutableStateOf("") }
+    var editWordDefinition by remember { mutableStateOf("") }
+    var editWordExampleSentence by remember { mutableStateOf("") }
 
     val reviewWords = words.filter { !it.isLearned }
     
@@ -2630,15 +2936,38 @@ fun VocabularyScreen(
                                     }
                                 }
 
-                                IconButton(
-                                    onClick = { viewModel.deleteVocabularyWord(wordItem.word) },
-                                    modifier = Modifier.testTag("delete_vocab_${wordItem.word}")
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = "Delete Word",
-                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
-                                    )
+                                    // Edit vocab word details
+                                    IconButton(
+                                        onClick = {
+                                            wordToEdit = wordItem
+                                            editWordValue = wordItem.word
+                                            editWordDefinition = wordItem.definition
+                                            editWordExampleSentence = wordItem.exampleSentence
+                                            showEditWordDialog = true
+                                        },
+                                        modifier = Modifier.testTag("edit_vocab_${wordItem.word}")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = "Edit Word",
+                                            tint = Color(0xFFF59E0B)
+                                        )
+                                    }
+
+                                    IconButton(
+                                        onClick = { viewModel.deleteVocabularyWord(wordItem.word) },
+                                        modifier = Modifier.testTag("delete_vocab_${wordItem.word}")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Delete Word",
+                                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -2646,6 +2975,83 @@ fun VocabularyScreen(
                 }
             }
         }
+    }
+
+    // --- EDIT VOCABULARY WORD DIALOG ---
+    if (showEditWordDialog && wordToEdit != null) {
+        AlertDialog(
+            onDismissRequest = { showEditWordDialog = false },
+            title = {
+                Text(
+                    text = "Edit Vocabulary Card",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = editWordValue,
+                        onValueChange = { editWordValue = it },
+                        modifier = Modifier.fillMaxWidth().testTag("edit_vocab_word_input"),
+                        label = { Text("Word/Phrase") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF8B5CF6)
+                        )
+                    )
+
+                    OutlinedTextField(
+                        value = editWordDefinition,
+                        onValueChange = { editWordDefinition = it },
+                        modifier = Modifier.fillMaxWidth().testTag("edit_vocab_def_input"),
+                        label = { Text("Definition") },
+                        maxLines = 4,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF8B5CF6)
+                        )
+                    )
+
+                    OutlinedTextField(
+                        value = editWordExampleSentence,
+                        onValueChange = { editWordExampleSentence = it },
+                        modifier = Modifier.fillMaxWidth().testTag("edit_vocab_sentence_input"),
+                        label = { Text("Example Sentence") },
+                        maxLines = 4,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF8B5CF6)
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (editWordValue.trim().isNotEmpty() && editWordDefinition.trim().isNotEmpty()) {
+                            if (wordToEdit!!.word != editWordValue.trim().lowercase()) {
+                                viewModel.deleteVocabularyWord(wordToEdit!!.word)
+                            }
+                            viewModel.saveVocabularyWord(
+                                word = editWordValue.trim(),
+                                definition = editWordDefinition.trim(),
+                                exampleSentence = editWordExampleSentence.trim()
+                            )
+                            showEditWordDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6))
+                ) {
+                    Text("Save Changes", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditWordDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     // --- QUICK QUIZ DIALOGS ---

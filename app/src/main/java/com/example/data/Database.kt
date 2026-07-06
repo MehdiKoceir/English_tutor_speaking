@@ -51,6 +51,15 @@ interface TutorDao {
     @Query("UPDATE conversation_sessions SET summary = :summary WHERE id = :sessionId")
     suspend fun updateSessionSummary(sessionId: String, summary: String)
 
+    @Query("UPDATE conversation_sessions SET topic = :topic WHERE id = :sessionId")
+    suspend fun updateSessionTopic(sessionId: String, topic: String)
+
+    @Query("DELETE FROM chat_messages WHERE id = :messageId")
+    suspend fun deleteMessage(messageId: String)
+
+    @Query("UPDATE chat_messages SET text = :text, correctedText = :correctedText WHERE id = :messageId")
+    suspend fun updateMessage(messageId: String, text: String, correctedText: String?)
+
     // --- Vocabulary Words Queries ---
     @Query("SELECT * FROM vocabulary_words ORDER BY createdAt DESC")
     fun getAllVocabularyWords(): Flow<List<VocabularyWord>>
@@ -140,6 +149,18 @@ class TutorRepository(private val tutorDao: TutorDao) {
 
     suspend fun updateSessionSummary(sessionId: String, summary: String) {
         tutorDao.updateSessionSummary(sessionId, summary)
+    }
+
+    suspend fun updateSessionTopic(sessionId: String, topic: String) {
+        tutorDao.updateSessionTopic(sessionId, topic)
+    }
+
+    suspend fun deleteMessage(messageId: String) {
+        tutorDao.deleteMessage(messageId)
+    }
+
+    suspend fun updateMessage(messageId: String, text: String, correctedText: String?) {
+        tutorDao.updateMessage(messageId, text, correctedText)
     }
 
     suspend fun insertVocabularyWord(word: VocabularyWord) {
