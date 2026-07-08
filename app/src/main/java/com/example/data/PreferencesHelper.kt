@@ -46,6 +46,10 @@ class PreferencesHelper(context: Context) {
         get() = prefs.getBoolean(KEY_CORRECTIONS_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_CORRECTIONS_ENABLED, value).apply()
 
+    var currentSessionId: String?
+        get() = prefs.getString("current_session_id", null)
+        set(value) = prefs.edit().putString("current_session_id", value).apply()
+
     var dailyPracticeGoalMinutes: Int
         get() = prefs.getInt("daily_practice_goal_minutes", 10)
         set(value) = prefs.edit().putInt("daily_practice_goal_minutes", value).apply()

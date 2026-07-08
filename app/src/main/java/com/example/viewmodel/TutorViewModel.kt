@@ -61,6 +61,19 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         checkAndUpdateStreakOnStartup()
+        loadSavedSessionOnStartup()
+    }
+
+    private fun loadSavedSessionOnStartup() {
+        viewModelScope.launch {
+            val savedSessionId = prefs.currentSessionId
+            if (savedSessionId != null) {
+                val session = repository.getSessionById(savedSessionId)
+                if (session != null) {
+                    loadSession(session)
+                }
+            }
+        }
     }
 
     private fun checkAndUpdateStreakOnStartup() {
@@ -199,8 +212,13 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun getMessagesForSession(sessionId: String): Flow<List<ChatMessage>> {
+        return repository.getMessagesForSession(sessionId)
+    }
+
     private fun loadSession(session: ConversationSession) {
         _currentSession.value = session
+        prefs.currentSessionId = session.id
         
         // Cancel previous collector if active
         messageCollectorJob?.cancel()
@@ -219,6 +237,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
             if (_currentSession.value?.id == sessionId) {
                 _currentSession.value = null
                 _currentMessages.value = emptyList()
+                prefs.currentSessionId = null
             }
         }
     }

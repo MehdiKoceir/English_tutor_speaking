@@ -1,6 +1,9 @@
 package com.example.ui
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -37,9 +40,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.ChatMessage
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import com.example.R
 import com.example.data.ConversationSession
 import com.example.data.VocabularyWord
 import com.example.viewmodel.TutorViewModel
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.foundation.combinedClickable
@@ -47,6 +58,7 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.foundation.ExperimentalFoundationApi
 
 sealed class Screen(val route: String) {
+    object Welcome : Screen("welcome")
     object Home : Screen("home")
     object Chat : Screen("chat")
     object History : Screen("history")
@@ -62,7 +74,7 @@ fun MainAppNavigation(
     onSpeak: (String) -> Unit,
     onStopSpeaking: () -> Unit
 ) {
-    var currentScreen by remember { mutableStateOf<Screen>(Screen.Home) }
+    var currentScreen by remember { mutableStateOf<Screen>(Screen.Welcome) }
     val currentSession by viewModel.currentSession.collectAsState()
     val isDark = isSystemInDarkTheme()
 
@@ -87,7 +99,7 @@ fun MainAppNavigation(
 
     Scaffold(
         bottomBar = {
-            if (currentScreen != Screen.Chat) {
+            if (currentScreen != Screen.Chat && currentScreen != Screen.Welcome) {
                 NavigationBar(
                     modifier = Modifier
                         .testTag("navigation_bar")
@@ -178,6 +190,11 @@ fun MainAppNavigation(
                 .padding(innerPadding)
         ) {
             when (currentScreen) {
+                Screen.Welcome -> WelcomeScreen(
+                    onEnterApp = {
+                        currentScreen = Screen.Home
+                    }
+                )
                 Screen.Home -> HomeScreen(
                     viewModel = viewModel,
                     onStartChat = {
@@ -208,6 +225,11 @@ fun MainAppNavigation(
                     onOpenSession = { session ->
                         viewModel.loadSessionById(session.id)
                         currentScreen = Screen.Chat
+                    },
+                    onSpeak = onSpeak,
+                    onPracticePronunciation = { text ->
+                        targetPronunciationText = text
+                        showPronunciationCoach = true
                     }
                 )
                 Screen.Vocabulary -> VocabularyScreen(
@@ -224,6 +246,262 @@ fun MainAppNavigation(
 }
 
 // ==========================================
+// 0. WELCOME / ONBOARDING SCREEN
+// ==========================================
+@Composable
+fun WelcomeScreen(
+    onEnterApp: () -> Unit
+) {
+    val isDark = isSystemInDarkTheme()
+    val scrollState = rememberScrollState()
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("welcome_screen")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // App Brand/Logo Header
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(Color(0xFF8B5CF6), Color(0xFF4F46E5))
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Translate,
+                        contentDescription = "AuraTalk Logo",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Text(
+                    text = "AuraTalk AI",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 0.5.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
+
+            // Hero Banner Illustration Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 500.dp)
+                    .heightIn(max = 300.dp),
+                shape = RoundedCornerShape(28.dp),
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = if (isDark) Color(0x1AFFFFFF) else Color(0x12000000)
+                ),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f)
+                )
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.img_onboarding_hero),
+                    contentDescription = "Onboarding Illustration",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1.2f)
+                        .clip(RoundedCornerShape(28.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            }
+
+            // Welcoming Title & Slogan
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 500.dp)
+                    .padding(horizontal = 8.dp)
+            ) {
+                Text(
+                    text = "Unlock Your Voice with AI",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 36.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+
+                Text(
+                    text = "Accelerate your fluency with tailored real-time speech tutoring, precise pronunciation analytics, and customized flashcard study sets.",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        textAlign = TextAlign.Center,
+                        lineHeight = 22.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // Key Feature Cards Grid
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 500.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Core Features",
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    ),
+                    color = Color(0xFF8B5CF6),
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+
+                WelcomeFeatureItem(
+                    icon = Icons.Default.Chat,
+                    iconTint = Color(0xFF8B5CF6),
+                    title = "AI Speech Conversations",
+                    description = "Converse naturally with intelligent native voice tutors. Get real-time grammatical corrections."
+                )
+
+                WelcomeFeatureItem(
+                    icon = Icons.Default.Mic,
+                    iconTint = Color(0xFF10B981),
+                    title = "Interactive Pronunciation Coach",
+                    description = "Record your voice to receive instant syllable feedback and comparison against flawless TTS audio."
+                )
+
+                WelcomeFeatureItem(
+                    icon = Icons.Default.AutoStories,
+                    iconTint = Color(0xFF3B82F6),
+                    title = "Personal Vocabulary Builder",
+                    description = "Save any sentence or unfamiliar term during conversation instantly to your local database deck."
+                )
+
+                WelcomeFeatureItem(
+                    icon = Icons.Default.EmojiEvents,
+                    iconTint = Color(0xFFF59E0B),
+                    title = "Challenge Quizzes & Streaks",
+                    description = "Review your cards with quizzes, and lock in your daily active study streak values directly."
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Get Started Primary Action Button
+            Button(
+                onClick = onEnterApp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 500.dp)
+                    .height(56.dp)
+                    .testTag("get_started_button"),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF8B5CF6)
+                )
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Get Started",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = Color.White
+                    )
+                    Icon(
+                        imageVector = Icons.Default.ArrowForward,
+                        contentDescription = "Forward arrow",
+                        tint = Color.White
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+    }
+}
+
+@Composable
+fun WelcomeFeatureItem(
+    icon: ImageVector,
+    iconTint: Color,
+    title: String,
+    description: String
+) {
+    val isDark = isSystemInDarkTheme()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (isDark) Color(0x0FFFFFFF) else Color(0x08000000)
+        ),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(iconTint.copy(alpha = 0.15f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 20.sp
+                )
+            }
+        }
+    }
+}
+
+// ==========================================
 // 1. HOME SCREEN
 // ==========================================
 @Composable
@@ -234,6 +512,7 @@ fun HomeScreen(
     var selectedLevel by remember { mutableStateOf("Beginner") }
     var selectedTopic by remember { mutableStateOf("Free Talk") }
     val isDark = isSystemInDarkTheme()
+    val currentSession by viewModel.currentSession.collectAsState()
 
     val levels = listOf("Beginner", "Intermediate", "Advanced")
     val topics = listOf(
@@ -378,6 +657,86 @@ fun HomeScreen(
                             ),
                             color = Color.White
                         )
+                    }
+                }
+            }
+        }
+
+        // Section: Resume Active Session
+        if (currentSession != null) {
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .testTag("resume_session_card"),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isDark) Color(0x1E8B5CF6) else Color(0xFFF5F3FF)
+                    ),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = Color(0xFF8B5CF6)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF8B5CF6).copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Chat,
+                                        contentDescription = "Active Session",
+                                        tint = Color(0xFF8B5CF6),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Column {
+                                    Text(
+                                        text = "Resume Conversation",
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onBackground
+                                    )
+                                    Text(
+                                        text = "${currentSession!!.topic} • ${currentSession!!.level}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            
+                            Button(
+                                onClick = onStartChat,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                                modifier = Modifier.testTag("resume_active_session_button")
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text("Resume", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = Color.White)
+                                    Icon(Icons.Default.ArrowForward, contentDescription = "Resume", tint = Color.White, modifier = Modifier.size(14.dp))
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -607,8 +966,9 @@ fun HomeScreen(
             }
         }
 
-        // Section: Select Level
+        // Section: Select Level Dropdown
         item {
+            var expanded by remember { mutableStateOf(false) }
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -621,37 +981,144 @@ fun HomeScreen(
                     ),
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                 )
-                // Pill slider
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(if (isDark) Color(0x1F000000) else Color(0x0F000000))
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+
+                Box(
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    levels.forEach { level ->
-                        val isSelected = selectedLevel == level
-                        Box(
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { expanded = true }
+                            .testTag("level_dropdown_button"),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isDark) Color(0x1F000000) else Color(0x0F000000)
+                        ),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = if (expanded) Color(0xFF8B5CF6) else (if (isDark) Color(0x1AFFFFFF) else Color(0x12000000))
+                        )
+                    ) {
+                        Row(
                             modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(
-                                    if (isSelected) {
-                                        if (isDark) Color(0xFF231E37) else Color.White
-                                    } else Color.Transparent
-                                )
-                                .clickable { selectedLevel = level }
-                                .padding(vertical = 10.dp)
-                                .testTag("level_chip_$level"),
-                            contentAlignment = Alignment.Center
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(
-                                text = if (level == "Intermediate") "Interm." else level,
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                                )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                // Dynamic Level Icon
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            when (selectedLevel) {
+                                                "Beginner" -> Color(0xFF34D399).copy(alpha = 0.15f)
+                                                "Intermediate" -> Color(0xFF3B82F6).copy(alpha = 0.15f)
+                                                else -> Color(0xFF8B5CF6).copy(alpha = 0.15f)
+                                            }
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = when (selectedLevel) {
+                                            "Beginner" -> Icons.Default.StarBorder
+                                            "Intermediate" -> Icons.Default.StarHalf
+                                            else -> Icons.Default.Star
+                                        },
+                                        contentDescription = "Proficiency Icon",
+                                        tint = when (selectedLevel) {
+                                            "Beginner" -> Color(0xFF10B981)
+                                            "Intermediate" -> Color(0xFF3B82F6)
+                                            else -> Color(0xFF8B5CF6)
+                                        },
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+
+                                Column {
+                                    Text(
+                                        text = selectedLevel,
+                                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onBackground
+                                    )
+                                    Text(
+                                        text = when (selectedLevel) {
+                                            "Beginner" -> "Simple words, slower conversations"
+                                            "Intermediate" -> "Natural speed, everyday topics"
+                                            else -> "Advanced idioms, complex ideas"
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Toggle Dropdown",
+                                tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+
+                    // The actual DropdownMenu overlay
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface)
+                            .border(1.dp, Color(0xFF8B5CF6).copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                    ) {
+                        levels.forEach { level ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = when (level) {
+                                                "Beginner" -> Icons.Default.StarBorder
+                                                "Intermediate" -> Icons.Default.StarHalf
+                                                else -> Icons.Default.Star
+                                            },
+                                            contentDescription = null,
+                                            tint = if (selectedLevel == level) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Column {
+                                            Text(
+                                                text = level,
+                                                style = MaterialTheme.typography.bodyLarge.copy(
+                                                    fontWeight = if (selectedLevel == level) FontWeight.Bold else FontWeight.Medium
+                                                ),
+                                                color = if (selectedLevel == level) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = when (level) {
+                                                    "Beginner" -> "A1-A2 level English"
+                                                    "Intermediate" -> "B1-B2 level English"
+                                                    else -> "C1-C2 level English"
+                                                },
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                },
+                                onClick = {
+                                    selectedLevel = level
+                                    expanded = false
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("level_chip_$level")
                             )
                         }
                     }
@@ -1011,8 +1478,8 @@ fun ChatScreen(
                         modifier = Modifier.testTag("export_transcript_button")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = "Export transcript",
+                            imageVector = Icons.Default.Download,
+                            contentDescription = "Download transcript",
                             tint = Color(0xFF8B5CF6)
                         )
                     }
@@ -1478,10 +1945,47 @@ fun MessageBubble(
     val isDark = isSystemInDarkTheme()
     var showCorrectionsDetail by remember { mutableStateOf(false) }
 
+    val scale = remember(message.id) { Animatable(0.9f) }
+    val alpha = remember(message.id) { Animatable(0f) }
+    val offsetY = remember(message.id) { Animatable(15f) }
+
+    LaunchedEffect(message.id) {
+        launch {
+            scale.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            )
+        }
+        launch {
+            alpha.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 250)
+            )
+        }
+        launch {
+            offsetY.animateTo(
+                targetValue = 0f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            )
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag(if (isUser) "user_message_bubble" else "tutor_message_bubble"),
+            .testTag(if (isUser) "user_message_bubble" else "tutor_message_bubble")
+            .graphicsLayer {
+                scaleX = scale.value
+                scaleY = scale.value
+                this.alpha = alpha.value
+                translationY = offsetY.value
+            },
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
         Row(
@@ -1722,7 +2226,9 @@ fun TutorThinkingIndicator() {
 @Composable
 fun HistoryScreen(
     viewModel: TutorViewModel,
-    onOpenSession: (ConversationSession) -> Unit
+    onOpenSession: (ConversationSession) -> Unit,
+    onSpeak: (String) -> Unit,
+    onPracticePronunciation: (String) -> Unit
 ) {
     val sessions by viewModel.allSessions.collectAsState()
     val sdf = SimpleDateFormat("MMM dd, yyyy - hh:mm a", Locale.getDefault())
@@ -1730,6 +2236,7 @@ fun HistoryScreen(
 
     var sessionToEdit by remember { mutableStateOf<ConversationSession?>(null) }
     var editTopicText by remember { mutableStateOf("") }
+    var selectedSessionForLog by remember { mutableStateOf<ConversationSession?>(null) }
 
     Scaffold(
         topBar = {
@@ -1804,7 +2311,7 @@ fun HistoryScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onOpenSession(session) }
+                            .clickable { selectedSessionForLog = session }
                             .testTag("session_card_${session.id}"),
                         shape = RoundedCornerShape(24.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -1958,6 +2465,142 @@ fun HistoryScreen(
                 }
             }
         )
+    }
+
+    if (selectedSessionForLog != null) {
+        val s = selectedSessionForLog!!
+        ConversationHistoryLogViewer(
+            session = s,
+            viewModel = viewModel,
+            onDismiss = { selectedSessionForLog = null },
+            onSpeak = onSpeak,
+            onPracticePronunciation = onPracticePronunciation,
+            onOpenSession = { onOpenSession(s) }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ConversationHistoryLogViewer(
+    session: ConversationSession,
+    viewModel: TutorViewModel,
+    onDismiss: () -> Unit,
+    onSpeak: (String) -> Unit,
+    onPracticePronunciation: (String) -> Unit,
+    onOpenSession: () -> Unit
+) {
+    val messages by viewModel.getMessagesForSession(session.id).collectAsState(initial = emptyList())
+    val isDark = isSystemInDarkTheme()
+    val sdf = SimpleDateFormat("MMM dd, yyyy - hh:mm a", Locale.getDefault())
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val createDocumentLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val transcript = generateTranscriptText(session, messages, 0)
+                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                    outputStream.write(transcript.toByteArray())
+                }
+                android.widget.Toast.makeText(context, "Transcript exported successfully!", android.widget.Toast.LENGTH_SHORT).show()
+            } catch (e: java.lang.Exception) {
+                android.widget.Toast.makeText(context, "Failed to export transcript: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                Text(
+                                    text = session.topic,
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "${session.level} • ${sdf.format(Date(session.createdAt))}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = onDismiss, modifier = Modifier.testTag("log_viewer_close_button")) {
+                                Icon(Icons.Default.Close, contentDescription = "Close")
+                            }
+                        },
+                        actions = {
+                            IconButton(
+                                onClick = {
+                                    val defaultFileName = "LingoTutor_Transcript_${session.topic.replace(" ", "_")}.txt"
+                                    createDocumentLauncher.launch(defaultFileName)
+                                },
+                                modifier = Modifier.testTag("log_viewer_download_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Download,
+                                    contentDescription = "Download transcript",
+                                    tint = Color(0xFF8B5CF6)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Button(
+                                onClick = onOpenSession,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.testTag("log_viewer_resume_button")
+                            ) {
+                                Text("Resume", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = Color.White)
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
+                    )
+                }
+            ) { innerPadding ->
+                if (messages.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = Color(0xFF8B5CF6))
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                            .padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp)
+                    ) {
+                        items(messages) { message ->
+                            MessageBubble(
+                                message = message,
+                                onSpeak = onSpeak,
+                                onLongClick = {},
+                                onPracticePronunciation = onPracticePronunciation
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
