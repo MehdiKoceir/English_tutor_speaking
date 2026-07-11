@@ -16,6 +16,7 @@ class PreferencesHelper(context: Context) {
         private const val KEY_OLLAMA_MODEL = "ollama_model"
         private const val KEY_TTS_ENABLED = "tts_enabled"
         private const val KEY_CORRECTIONS_ENABLED = "corrections_enabled"
+        private const val KEY_GEMINI_API_KEY = "gemini_api_key"
 
         // Default local IP pointing to emulator host or blank
         private const val DEFAULT_OLLAMA_URL = "http://10.0.2.2:11434"
@@ -23,7 +24,7 @@ class PreferencesHelper(context: Context) {
     }
 
     var useGeminiDirect: Boolean
-        get() = prefs.getBoolean(KEY_USE_GEMINI_DIRECT, true) // Default to Gemini Direct for out-of-the-box usage
+        get() = prefs.getBoolean(KEY_USE_GEMINI_DIRECT, false) // Default to false when Offline Demo Mode is default
         set(value) = prefs.edit().putBoolean(KEY_USE_GEMINI_DIRECT, value).apply()
 
     var ollamaUrl: String
@@ -45,6 +46,22 @@ class PreferencesHelper(context: Context) {
     var correctionsEnabled: Boolean
         get() = prefs.getBoolean(KEY_CORRECTIONS_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_CORRECTIONS_ENABLED, value).apply()
+
+    var geminiApiKey: String
+        get() = prefs.getString(KEY_GEMINI_API_KEY, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_GEMINI_API_KEY, value).apply()
+
+    var useDemoMode: Boolean
+        get() = prefs.getBoolean("use_demo_mode", true) // Default to Demo Mode so the app works instantly!
+        set(value) = prefs.edit().putBoolean("use_demo_mode", value).apply()
+
+    var ttsRate: Float
+        get() = prefs.getFloat("tts_rate", 1.0f)
+        set(value) = prefs.edit().putFloat("tts_rate", value).apply()
+
+    var ttsLocale: String
+        get() = prefs.getString("tts_locale", "US") ?: "US"
+        set(value) = prefs.edit().putString("tts_locale", value).apply()
 
     var currentSessionId: String?
         get() = prefs.getString("current_session_id", null)

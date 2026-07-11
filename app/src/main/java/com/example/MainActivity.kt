@@ -37,6 +37,8 @@ import java.util.*
 class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private val TAG = "MainActivity"
 
+    private val prefs by lazy { com.example.data.PreferencesHelper(this) }
+
     private var speechRecognizer: SpeechRecognizer? = null
     private var textToSpeech: TextToSpeech? = null
     private var isTtsInitialized = false
@@ -119,6 +121,21 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         if (isTtsInitialized) {
             // Stop any ongoing speech first
             textToSpeech?.stop()
+            
+            // Set speech rate speed
+            val rate = prefs.ttsRate
+            textToSpeech?.setSpeechRate(rate)
+            
+            // Set speech accent/locale
+            val currentLocale = when (prefs.ttsLocale) {
+                "UK" -> Locale.UK
+                "CA" -> Locale.CANADA
+                "AU" -> Locale("en", "AU")
+                "IN" -> Locale("en", "IN")
+                else -> Locale.US
+            }
+            textToSpeech?.setLanguage(currentLocale)
+
             // Clean up text if it contains errors or tags
             val cleanText = text.replace(Regex("\\[Error:[^\\]]*\\]"), "")
             if (cleanText.trim().isNotEmpty()) {

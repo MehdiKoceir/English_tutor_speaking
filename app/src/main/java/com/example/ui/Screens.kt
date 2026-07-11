@@ -56,6 +56,11 @@ import java.util.*
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 
 sealed class Screen(val route: String) {
     object Welcome : Screen("welcome")
@@ -214,6 +219,9 @@ fun MainAppNavigation(
                             onPracticePronunciation = { text ->
                                 targetPronunciationText = text
                                 showPronunciationCoach = true
+                            },
+                            onNavigateToSettings = {
+                                currentScreen = Screen.Settings
                             }
                         )
                     } else {
@@ -1365,7 +1373,8 @@ fun ChatScreen(
     onBack: () -> Unit,
     onStartSpeechRecognizer: (onResult: (String) -> Unit) -> Unit,
     onSpeak: (String) -> Unit,
-    onPracticePronunciation: (String) -> Unit
+    onPracticePronunciation: (String) -> Unit,
+    onNavigateToSettings: () -> Unit = {}
 ) {
     val session by viewModel.currentSession.collectAsState()
     val messages by viewModel.currentMessages.collectAsState()
@@ -1542,7 +1551,11 @@ fun ChatScreen(
                             selectedMessage = msg
                             showChatOptionsDialog = true
                         },
-                        onPracticePronunciation = onPracticePronunciation
+                        onPracticePronunciation = onPracticePronunciation,
+                        onNavigateToSettings = onNavigateToSettings,
+                        onSwitchToDemoMode = { errorId ->
+                            viewModel.switchToDemoModeAndRetry(errorId, onSpeak)
+                        }
                     )
                 }
 
@@ -1933,17 +1946,24 @@ fun ChatScreen(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun MessageBubble(
     message: ChatMessage,
     onSpeak: (String) -> Unit,
     onLongClick: (ChatMessage) -> Unit,
-    onPracticePronunciation: (String) -> Unit
+    onPracticePronunciation: (String) -> Unit,
+    onNavigateToSettings: () -> Unit = {},
+    onSwitchToDemoMode: (messageId: String) -> Unit = {}
 ) {
     val isUser = message.sender == "user"
     val isDark = isSystemInDarkTheme()
     var showCorrectionsDetail by remember { mutableStateOf(false) }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember { com.example.data.PreferencesHelper(context) }
+    var isWordModeEnabled by remember { mutableStateOf(false) }
+    var showTtsStudio by remember { mutableStateOf(false) }
 
     val scale = remember(message.id) { Animatable(0.9f) }
     val alpha = remember(message.id) { Animatable(0f) }
@@ -1988,196 +2008,919 @@ fun MessageBubble(
             },
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
-            verticalAlignment = Alignment.Bottom
-        ) {
-            if (!isUser) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(colors = listOf(Color(0xFF8B5CF6), Color(0xFF4F46E5)))
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.School,
-                        contentDescription = "Tutor Icon",
-                        tint = Color.White,
-                        modifier = Modifier.size(16.dp)
+        val isError = !isUser && (message.text.startsWith("[Error:") || message.text.contains("Error:"))
+
+        if (isError) {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.95f)
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp)
+                    .testTag("error_message_card")
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = "Error Icon",
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Tutor Connection Issue",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = message.text.removeSurrounding("[", "]"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = { onSwitchToDemoMode(message.id) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError
+                            ),
+                            modifier = Modifier.testTag("start_offline_demo_button")
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Start Offline Demo", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
+                            }
+                        }
+
+                        TextButton(
+                            onClick = onNavigateToSettings,
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            ),
+                            modifier = Modifier.testTag("go_to_settings_button")
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Go to Settings", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
+                            }
+                        }
+                    }
                 }
-                Spacer(modifier = Modifier.width(8.dp))
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                if (!isUser) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(colors = listOf(Color(0xFF8B5CF6), Color(0xFF4F46E5)))
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.School,
+                            contentDescription = "Tutor Icon",
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+
+                // Actual bubble container with premium gradient for user, glassy card for tutor
+                Card(
+                    shape = RoundedCornerShape(
+                        topStart = 20.dp,
+                        topEnd = 20.dp,
+                        bottomStart = if (isUser) 20.dp else 4.dp,
+                        bottomEnd = if (isUser) 4.dp else 20.dp
+                    ),
+                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                    border = if (isUser) null else BorderStroke(
+                        1.dp,
+                        if (isDark) Color(0x1AFFFFFF) else Color(0x80FFFFFF)
+                    ),
+                    modifier = Modifier
+                        .widthIn(max = 280.dp)
+                        .combinedClickable(
+                            onClick = { if (!isUser) { onSpeak(message.text) } },
+                            onLongClick = { onLongClick(message) }
+                        )
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                if (isUser) {
+                                    Brush.linearGradient(colors = listOf(Color(0xFF8B5CF6), Color(0xFF4F46E5)))
+                                } else {
+                                    Brush.linearGradient(
+                                        colors = if (isDark) {
+                                            listOf(Color(0x1F2E2A3E), Color(0x1F211D2F))
+                                        } else {
+                                            listOf(Color(0xE6FFFFFF), Color(0xCCFFFFFF))
+                                        }
+                                    )
+                                }
+                            )
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                    ) {
+                        if (!isUser && isWordModeEnabled) {
+                            val words = remember(message.text) { message.text.split(Regex("(?<=\\b)|(?=\\b)")) }
+                            androidx.compose.foundation.layout.FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Start,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                words.forEach { segment ->
+                                    if (segment.isBlank()) {
+                                        Text(text = segment, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                                    } else if (segment.any { it.isLetterOrDigit() }) {
+                                        var isTapped by remember { mutableStateOf(false) }
+                                        LaunchedEffect(isTapped) {
+                                            if (isTapped) {
+                                                kotlinx.coroutines.delay(400)
+                                                isTapped = false
+                                            }
+                                        }
+                                        Text(
+                                            text = segment,
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                            color = if (isTapped) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(if (isTapped) Color(0x268B5CF6) else Color.Transparent)
+                                                .clickable {
+                                                    isTapped = true
+                                                    val cleanSpeakWord = segment.replace(Regex("^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$"), "")
+                                                    if (cleanSpeakWord.isNotEmpty()) {
+                                                        onSpeak(cleanSpeakWord)
+                                                    } else {
+                                                        onSpeak(segment)
+                                                    }
+                                                }
+                                                .padding(horizontal = 1.dp)
+                                        )
+                                    } else {
+                                        Text(text = segment, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
+                                    }
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = message.text,
+                                color = if (isUser) Color.White else MaterialTheme.colorScheme.onSurface,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
             }
 
-            // Actual bubble container with premium gradient for user, glassy card for tutor
-            Card(
-                shape = RoundedCornerShape(
-                    topStart = 20.dp,
-                    topEnd = 20.dp,
-                    bottomStart = if (isUser) 20.dp else 4.dp,
-                    bottomEnd = if (isUser) 4.dp else 20.dp
-                ),
-                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                border = if (isUser) null else BorderStroke(
-                    1.dp,
-                    if (isDark) Color(0x1AFFFFFF) else Color(0x80FFFFFF)
-                ),
-                modifier = Modifier
-                    .widthIn(max = 280.dp)
-                    .combinedClickable(
-                        onClick = { if (!isUser) { onSpeak(message.text) } },
-                        onLongClick = { onLongClick(message) }
+            if (!isUser) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.padding(start = 40.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 1. Listen Button
+                    Row(
+                        modifier = Modifier.clickable { onSpeak(message.text) },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.VolumeUp,
+                            contentDescription = "Speak Sentence",
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Listen",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                        )
+                    }
+
+                    // 2. Word Mode Toggle
+                    Row(
+                        modifier = Modifier.clickable { isWordModeEnabled = !isWordModeEnabled },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isWordModeEnabled) Icons.Default.CheckCircle else Icons.Default.Help,
+                            contentDescription = "Toggle Word Explorer",
+                            tint = if (isWordModeEnabled) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Word Mode",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isWordModeEnabled) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                        )
+                    }
+
+                    // 3. Tuning / Speech Synthesis Studio Toggle
+                    Row(
+                        modifier = Modifier.clickable { showTtsStudio = !showTtsStudio },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = "TTS settings",
+                            tint = if (showTtsStudio) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Tuning",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (showTtsStudio) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                        )
+                    }
+                    
+                    // 4. Practice Button
+                    Row(
+                        modifier = Modifier.clickable { 
+                            onPracticePronunciation(message.text)
+                        },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = "Practice Pronunciation",
+                            tint = Color(0xFF10B981).copy(alpha = 0.8f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Practice",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF10B981).copy(alpha = 0.8f)
+                        )
+                    }
+                }
+
+                // Show tip if word explorer is active
+                if (isWordModeEnabled) {
+                    Text(
+                        text = "💡 Tap any word above to hear its clean pronunciation.",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Normal),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                        modifier = Modifier.padding(start = 40.dp, top = 4.dp, bottom = 4.dp)
                     )
-            ) {
-                Box(
-                    modifier = Modifier
-                        .background(
-                            if (isUser) {
-                                Brush.linearGradient(colors = listOf(Color(0xFF8B5CF6), Color(0xFF4F46E5)))
-                            } else {
-                                Brush.linearGradient(
-                                    colors = if (isDark) {
-                                        listOf(Color(0x1F2E2A3E), Color(0x1F211D2F))
-                                    } else {
-                                        listOf(Color(0xE6FFFFFF), Color(0xCCFFFFFF))
-                                    }
+                }
+
+                // Expanded Speech Synthesis Studio card
+                androidx.compose.animation.AnimatedVisibility(visible = showTtsStudio) {
+                    var localRate by remember { mutableStateOf(prefs.ttsRate) }
+                    var localLocale by remember { mutableStateOf(prefs.ttsLocale) }
+
+                    Card(
+                        modifier = Modifier
+                            .widthIn(max = 280.dp)
+                            .padding(start = 40.dp, top = 8.dp, bottom = 4.dp)
+                            .border(
+                                BorderStroke(1.dp, if (isDark) Color(0x1AFFFFFF) else Color(0x0D000000)),
+                                RoundedCornerShape(16.dp)
+                            ),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isDark) Color(0xFF191626) else Color(0xFFF3F2F8)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Tune,
+                                    contentDescription = "TTS Tuning",
+                                    tint = Color(0xFF8B5CF6),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "Speech Synthesis Studio",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
-                        )
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
-                ) {
-                    Text(
-                        text = message.text,
-                        color = if (isUser) Color.White else MaterialTheme.colorScheme.onSurface,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-            }
-        }
 
-        if (!isUser) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.padding(start = 40.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    modifier = Modifier.clickable { onSpeak(message.text) },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.VolumeUp,
-                        contentDescription = "Speak Sentence",
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = "Listen",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                    )
-                }
-                
-                Row(
-                    modifier = Modifier.clickable { 
-                        onPracticePronunciation(message.text)
-                    },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Mic,
-                        contentDescription = "Practice Pronunciation",
-                        tint = Color(0xFF10B981).copy(alpha = 0.8f),
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = "Practice",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF10B981).copy(alpha = 0.8f)
-                    )
+                            // Speech Speed Rate selector
+                            Column {
+                                Text(
+                                    text = "Speed Rate: ${"%.2f".format(localRate)}x",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    listOf(0.7f, 1.0f, 1.3f, 1.6f).forEach { rate ->
+                                        val isSelected = kotlin.math.abs(localRate - rate) < 0.05f
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(
+                                                    if (isSelected) Color(0xFF8B5CF6)
+                                                    else if (isDark) Color(0x1AFFFFFF) else Color(0x0F000000)
+                                                )
+                                                .clickable {
+                                                    localRate = rate
+                                                    prefs.ttsRate = rate
+                                                    onSpeak(message.text)
+                                                }
+                                                .padding(vertical = 6.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = when (rate) {
+                                                    0.7f -> "0.7x"
+                                                    1.0f -> "1.0x"
+                                                    1.3f -> "1.3x"
+                                                    else -> "1.6x"
+                                                },
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                ),
+                                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Accent selector
+                            Column {
+                                Text(
+                                    text = "Voice Accent:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    listOf(
+                                        "US" to "🇺🇸 US",
+                                        "UK" to "🇬🇧 UK",
+                                        "AU" to "🇦🇺 AU",
+                                        "IN" to "🇮🇳 IN"
+                                    ).forEach { (locCode, label) ->
+                                        val isSelected = localLocale == locCode
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(
+                                                    if (isSelected) Color(0xFF8B5CF6)
+                                                    else if (isDark) Color(0x1AFFFFFF) else Color(0x0F000000)
+                                                )
+                                                .clickable {
+                                                    localLocale = locCode
+                                                    prefs.ttsLocale = locCode
+                                                    onSpeak(message.text)
+                                                }
+                                                .padding(vertical = 4.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = label,
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                ),
+                                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
 
         // Grammar correction display (friendly gold/amber AI suggestion tip)
         if (isUser && message.correctedText != null) {
-            val amberBg = if (isDark) Color(0x33FFB300) else Color(0xFFFEF3C7)
-            val amberBorder = if (isDark) Color(0x66FFB300) else Color(0xFFFDE68A)
-            val amberText = if (isDark) Color(0xFFFFCA28) else Color(0xFF92400E)
+            val amberBg = if (isDark) Color(0x22F59E0B) else Color(0xFFFEF3C7)
+            val amberBorder = if (isDark) Color(0x44F59E0B) else Color(0xFFFDE68A)
+            val amberText = if (isDark) Color(0xFFFBBF24) else Color(0xFF92400E)
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val clipboardManager = LocalClipboardManager.current
 
             Spacer(modifier = Modifier.height(6.dp))
             Row(
                 modifier = Modifier
-                    .widthIn(max = 280.dp)
+                    .widthIn(max = 290.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(amberBg)
                     .border(BorderStroke(1.dp, amberBorder), RoundedCornerShape(12.dp))
                     .clickable { showCorrectionsDetail = !showCorrectionsDetail }
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "AI Suggestion Star",
+                        tint = amberText,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "Review grammar & vocabulary",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                        color = amberText
+                    )
+                }
                 Icon(
-                    imageVector = Icons.Default.AutoAwesome,
-                    contentDescription = "AI Suggestion Star",
+                    imageVector = if (showCorrectionsDetail) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (showCorrectionsDetail) "Collapse" else "Expand",
                     tint = amberText,
                     modifier = Modifier.size(16.dp)
-                )
-                Text(
-                    text = "Grammar feedback available",
-                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                    color = amberText
                 )
             }
 
             AnimatedVisibility(visible = showCorrectionsDetail) {
+                val parsedCorrections = remember(message.correctionsJson) {
+                    parseCorrections(message.correctionsJson)
+                }
+
                 Card(
                     modifier = Modifier
-                        .widthIn(max = 280.dp)
+                        .widthIn(max = 290.dp)
                         .padding(top = 6.dp)
                         .border(BorderStroke(1.dp, amberBorder), RoundedCornerShape(16.dp)),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = amberBg)
+                    colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF16141F) else Color(0xFFFFFDF5))
                 ) {
                     Column(
                         modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Column {
+                        // Title with glowing effect / star
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = "Corrected sentence:",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = amberText
+                                text = "Analysis & Feedback",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface
                             )
-                            Text(
-                                text = message.correctedText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (isDark) Color(0xFFFFF3CD) else Color(0xFF78350F)
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = amberText,
+                                modifier = Modifier.size(16.dp)
                             )
                         }
-                        if (message.correctionsJson != null && message.correctionsJson.isNotEmpty()) {
-                            Column {
-                                Text(
-                                    text = "Explanation:",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = amberText
+
+                        // Comparative Diff View
+                        ComparativeDiffView(
+                            original = message.text,
+                            corrected = message.correctedText,
+                            corrections = parsedCorrections,
+                            isDark = isDark
+                        )
+
+                        // Action Buttons: Copy, Listen, Practice for Corrected Version
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Copy button
+                            IconButton(
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(message.correctedText))
+                                    android.widget.Toast.makeText(context, "Copied corrected sentence!", android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(if (isDark) Color(0x1AFFFFFF) else Color(0x0A000000), CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "Copy Corrected",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
                                 )
-                                Text(
-                                    text = message.correctionsJson,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (isDark) Color(0xFFFFF3CD).copy(alpha = 0.85f) else Color(0xFF78350F).copy(alpha = 0.85f)
+                            }
+
+                            // Listen button
+                            IconButton(
+                                onClick = { onSpeak(message.correctedText) },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(if (isDark) Color(0x1AFFFFFF) else Color(0x0A000000), CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.VolumeUp,
+                                    contentDescription = "Listen to Corrected",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
                                 )
+                            }
+
+                            // Practice button
+                            IconButton(
+                                onClick = { onPracticePronunciation(message.correctedText) },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(if (isDark) Color(0x1A10B981) else Color(0x1410B981), CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Mic,
+                                    contentDescription = "Practice Pronunciation",
+                                    tint = Color(0xFF10B981),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            
+                            Spacer(modifier = Modifier.weight(1f))
+                            
+                            Text(
+                                text = "Learn & Practice",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            )
+                        }
+
+                        // Individual Corrections List
+                        if (parsedCorrections.isNotEmpty()) {
+                            HorizontalDivider(
+                                color = if (isDark) Color(0x1AFFFFFF) else Color(0x0D000000),
+                                thickness = 1.dp
+                            )
+                            
+                            Text(
+                                text = "Specific Improvements:",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                parsedCorrections.forEach { correction ->
+                                    CorrectionExplanationCard(
+                                        correction = correction,
+                                        isDark = isDark
+                                    )
+                                }
                             }
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+// ========================================================
+// GRAMMAR CORRECTION & VOCABULARY HIGHLIGHTING COMPONENTS
+// ========================================================
+
+data class CorrectionItem(
+    val original: String,
+    val fixed: String,
+    val reason: String
+)
+
+fun parseCorrections(correctionsJson: String?): List<CorrectionItem> {
+    if (correctionsJson.isNullOrBlank()) return emptyList()
+    
+    // Try parsing as JSON first
+    try {
+        val jsonArray = org.json.JSONArray(correctionsJson)
+        val list = mutableListOf<CorrectionItem>()
+        for (i in 0 until jsonArray.length()) {
+            val obj = jsonArray.getJSONObject(i)
+            list.add(
+                CorrectionItem(
+                    original = obj.optString("original", ""),
+                    fixed = obj.optString("fixed", ""),
+                    reason = obj.optString("reason", "")
+                )
+            )
+        }
+        if (list.isNotEmpty()) return list
+    } catch (e: Exception) {
+        // Fallback to parsing bulleted string format
+    }
+    
+    // Parse bulleted format:
+    // • "original" -> "fixed": reason
+    val lines = correctionsJson.split("\n")
+    val list = mutableListOf<CorrectionItem>()
+    val bulletRegex = Regex("""^•\s*"(.*)"\s*->\s*"(.*)":\s*(.*)$""")
+    val fallbackRegex = Regex("""^•\s*(.*)\s*->\s*(.*):\s*(.*)$""")
+    
+    for (line in lines) {
+        val trimmed = line.trim()
+        if (trimmed.isEmpty()) continue
+        
+        var match = bulletRegex.matchEntire(trimmed)
+        if (match == null) {
+            match = fallbackRegex.matchEntire(trimmed)
+        }
+        
+        if (match != null) {
+            val original = match.groupValues[1]
+            val fixed = match.groupValues[2]
+            val reason = match.groupValues[3]
+            list.add(CorrectionItem(original, fixed, reason))
+        } else {
+            // Last resort: if it's just a bullet or line with reason, map it
+            val cleanedLine = trimmed.removePrefix("•").trim()
+            if (cleanedLine.isNotEmpty()) {
+                list.add(CorrectionItem("", "", cleanedLine))
+            }
+        }
+    }
+    return list
+}
+
+@Composable
+fun ComparativeDiffView(
+    original: String,
+    corrected: String,
+    corrections: List<CorrectionItem>,
+    isDark: Boolean
+) {
+    val redColor = if (isDark) Color(0xFFF87171) else Color(0xFFDC2626)
+    val greenColor = if (isDark) Color(0xFF34D399) else Color(0xFF059669)
+    val redBg = if (isDark) Color(0x33EF4444) else Color(0xFFFEE2E2)
+    val greenBg = if (isDark) Color(0x3310B981) else Color(0xFFD1FAE5)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        // --- 1. Original Text with Errors Highlighted (Strikethrough / Red) ---
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (isDark) Color(0x1A000000) else Color(0x0F000000))
+                .padding(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Original with issues",
+                    tint = redColor,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = "Your sentence:",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            // Build AnnotatedString for original
+            val annotatedOriginal = remember(original, corrections) {
+                buildAnnotatedString {
+                    append(original)
+                    // Highlight each original segment
+                    corrections.forEach { correction ->
+                        if (correction.original.isNotEmpty()) {
+                            var startIndex = original.indexOf(correction.original)
+                            while (startIndex != -1) {
+                                val endIndex = startIndex + correction.original.length
+                                addStyle(
+                                    style = SpanStyle(
+                                        color = redColor,
+                                        textDecoration = TextDecoration.LineThrough,
+                                        fontWeight = FontWeight.Medium,
+                                        background = redBg
+                                    ),
+                                    start = startIndex,
+                                    end = endIndex
+                                )
+                                startIndex = original.indexOf(correction.original, endIndex)
+                            }
+                        }
+                    }
+                }
+            }
+            Text(
+                text = annotatedOriginal,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+            )
+        }
+
+        // --- 2. Corrected Text with Fixes Highlighted (Bold / Green) ---
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (isDark) Color(0x1F10B981) else Color(0x0D10B981))
+                .padding(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = "Corrected version",
+                    tint = greenColor,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = "Suggested correction:",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = greenColor
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            // Build AnnotatedString for corrected
+            val annotatedCorrected = remember(corrected, corrections) {
+                buildAnnotatedString {
+                    append(corrected)
+                    // Highlight each fixed segment
+                    corrections.forEach { correction ->
+                        if (correction.fixed.isNotEmpty()) {
+                            var startIndex = corrected.indexOf(correction.fixed)
+                            while (startIndex != -1) {
+                                val endIndex = startIndex + correction.fixed.length
+                                addStyle(
+                                    style = SpanStyle(
+                                        color = greenColor,
+                                        fontWeight = FontWeight.Bold,
+                                        background = greenBg
+                                    ),
+                                    start = startIndex,
+                                    end = endIndex
+                                )
+                                startIndex = corrected.indexOf(correction.fixed, endIndex)
+                            }
+                        }
+                    }
+                }
+            }
+            Text(
+                text = annotatedCorrected,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+@Composable
+fun CorrectionExplanationCard(
+    correction: CorrectionItem,
+    isDark: Boolean
+) {
+    val cardBg = if (isDark) Color(0xFF1E1B2E) else Color(0xFFF9F9FB)
+    val cardBorder = if (isDark) Color(0x338B5CF6) else Color(0x1F8B5CF6)
+    
+    val redColor = if (isDark) Color(0xFFF87171) else Color(0xFFDC2626)
+    val greenColor = if (isDark) Color(0xFF34D399) else Color(0xFF059669)
+    
+    // Auto-detect category
+    val reasonLower = correction.reason.lowercase()
+    val (category, categoryColor) = when {
+        reasonLower.contains("spelling") || reasonLower.contains("typo") -> {
+            "Spelling" to Color(0xFFEC4899) // Pink
+        }
+        reasonLower.contains("capitalize") || reasonLower.contains("capital") -> {
+            "Capitalization" to Color(0xFF3B82F6) // Blue
+        }
+        reasonLower.contains("punctuation") || reasonLower.contains("apostrophe") || reasonLower.contains("comma") || reasonLower.contains("period") -> {
+            "Punctuation" to Color(0xFF8B5CF6) // Purple
+        }
+        reasonLower.contains("vocabulary") || reasonLower.contains("phrasing") || reasonLower.contains("word choice") || reasonLower.contains("idiom") -> {
+            "Vocabulary" to Color(0xFFF59E0B) // Amber
+        }
+        else -> {
+            "Grammar" to Color(0xFF10B981) // Emerald Green
+        }
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(BorderStroke(1.dp, cardBorder), RoundedCornerShape(12.dp)),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBg)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Category Badge & Title
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(categoryColor.copy(alpha = 0.15f))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = category,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = categoryColor
+                    )
+                }
+            }
+
+            // Before / After Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (correction.original.isNotEmpty()) {
+                    Text(
+                        text = correction.original,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            textDecoration = TextDecoration.LineThrough,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        color = redColor
+                    )
+                    Icon(
+                        imageVector = Icons.Default.ArrowForward,
+                        contentDescription = "Changed to",
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+                
+                Text(
+                    text = correction.fixed.ifEmpty { "removed" },
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                    color = if (correction.fixed.isEmpty()) redColor else greenColor
+                )
+            }
+
+            // Explanation Text
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = "Explanation details",
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    modifier = Modifier.size(14.dp).padding(top = 2.dp)
+                )
+                Text(
+                    text = correction.reason,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                )
             }
         }
     }
@@ -2618,11 +3361,14 @@ fun SettingsScreen(
     val model by viewModel.ollamaModel.collectAsState()
     val ttsEnabled by viewModel.ttsEnabled.collectAsState()
     val correctionsEnabled by viewModel.correctionsEnabled.collectAsState()
+    val geminiApiKey by viewModel.geminiApiKey.collectAsState()
+    val useDemoMode by viewModel.useDemoMode.collectAsState()
     val isDark = isSystemInDarkTheme()
 
     var inputUrl by remember(url) { mutableStateOf(url) }
     var inputApiKey by remember(apiKey) { mutableStateOf(apiKey) }
     var inputModel by remember(model) { mutableStateOf(model) }
+    var inputGeminiApiKey by remember(geminiApiKey) { mutableStateOf(geminiApiKey) }
 
     Scaffold(
         topBar = {
@@ -2675,7 +3421,9 @@ fun SettingsScreen(
                                         inputApiKey,
                                         inputModel,
                                         !ttsEnabled,
-                                        correctionsEnabled
+                                        correctionsEnabled,
+                                        inputGeminiApiKey,
+                                        useDemoMode
                                     )
                                 },
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -2703,7 +3451,7 @@ fun SettingsScreen(
                             Switch(
                                 checked = ttsEnabled,
                                 onCheckedChange = {
-                                    viewModel.updateSettings(useGeminiDirect, inputUrl, inputApiKey, inputModel, it, correctionsEnabled)
+                                    viewModel.updateSettings(useGeminiDirect, inputUrl, inputApiKey, inputModel, it, correctionsEnabled, inputGeminiApiKey, useDemoMode)
                                 },
                                 modifier = Modifier.testTag("setting_tts_switch"),
                                 colors = SwitchDefaults.colors(
@@ -2711,6 +3459,120 @@ fun SettingsScreen(
                                     checkedTrackColor = Color(0xFF8B5CF6)
                                 )
                             )
+                        }
+
+                        // Speech Synthesis tuning section if TTS is enabled
+                        if (ttsEnabled) {
+                            val context = androidx.compose.ui.platform.LocalContext.current
+                            val ttsRate by viewModel.ttsRate.collectAsState()
+                            val ttsLocale by viewModel.ttsLocale.collectAsState()
+
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isDark) Color(0x0DFFFFFF) else Color(0x05000000)
+                                ),
+                                shape = RoundedCornerShape(16.dp),
+                                border = BorderStroke(1.dp, if (isDark) Color(0x10FFFFFF) else Color(0x0D000000))
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text(
+                                        text = "Speech Synthesis Configuration",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                        color = Color(0xFF8B5CF6)
+                                    )
+
+                                    // Speed Rate selection
+                                    Column {
+                                        Text(
+                                            text = "Default Speed Rate: ${"%.2f".format(ttsRate)}x",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            listOf(0.7f, 1.0f, 1.3f, 1.6f).forEach { rate ->
+                                                val isSelected = kotlin.math.abs(ttsRate - rate) < 0.05f
+                                                Box(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .background(
+                                                            if (isSelected) Color(0xFF8B5CF6)
+                                                            else if (isDark) Color(0x1AFFFFFF) else Color(0x0F000000)
+                                                        )
+                                                        .clickable {
+                                                            viewModel.updateTtsRate(rate)
+                                                        }
+                                                        .padding(vertical = 6.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = when (rate) {
+                                                            0.7f -> "0.7x (Slow)"
+                                                            1.0f -> "1.0x (Normal)"
+                                                            1.3f -> "1.3x"
+                                                            else -> "1.6x"
+                                                        },
+                                                        style = MaterialTheme.typography.labelSmall.copy(
+                                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                        ),
+                                                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Accent selection
+                                    Column {
+                                        Text(
+                                            text = "Default Voice Accent / Dialect:",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            listOf(
+                                                "US" to "🇺🇸 US",
+                                                "UK" to "🇬🇧 UK",
+                                                "AU" to "🇦🇺 AU",
+                                                "IN" to "🇮🇳 IN"
+                                            ).forEach { (locCode, label) ->
+                                                val isSelected = ttsLocale == locCode
+                                                Box(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .background(
+                                                            if (isSelected) Color(0xFF8B5CF6)
+                                                            else if (isDark) Color(0x1AFFFFFF) else Color(0x0F000000)
+                                                        )
+                                                        .clickable {
+                                                            viewModel.updateTtsLocale(locCode)
+                                                        }
+                                                        .padding(vertical = 6.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = label,
+                                                        style = MaterialTheme.typography.labelSmall.copy(
+                                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                        ),
+                                                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -2726,7 +3588,9 @@ fun SettingsScreen(
                                         inputApiKey,
                                         inputModel,
                                         ttsEnabled,
-                                        !correctionsEnabled
+                                        !correctionsEnabled,
+                                        inputGeminiApiKey,
+                                        useDemoMode
                                     )
                                 },
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -2754,7 +3618,7 @@ fun SettingsScreen(
                             Switch(
                                 checked = correctionsEnabled,
                                 onCheckedChange = {
-                                    viewModel.updateSettings(useGeminiDirect, inputUrl, inputApiKey, inputModel, ttsEnabled, it)
+                                    viewModel.updateSettings(useGeminiDirect, inputUrl, inputApiKey, inputModel, ttsEnabled, it, inputGeminiApiKey, useDemoMode)
                                 },
                                 modifier = Modifier.testTag("setting_corrections_switch"),
                                 colors = SwitchDefaults.colors(
@@ -2835,8 +3699,7 @@ fun SettingsScreen(
                     }
                 }
             }
-
-            // Engine Selection Settings Card
+                  // Engine Selection Settings Card
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -2852,43 +3715,7 @@ fun SettingsScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Gemini Direct Toggle
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    viewModel.updateSettings(
-                                        true,
-                                        inputUrl,
-                                        inputApiKey,
-                                        inputModel,
-                                        ttsEnabled,
-                                        correctionsEnabled
-                                    )
-                                },
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                RadioButton(
-                                    selected = useGeminiDirect,
-                                    onClick = {
-                                        viewModel.updateSettings(true, inputUrl, inputApiKey, inputModel, ttsEnabled, correctionsEnabled)
-                                    },
-                                    colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF8B5CF6)),
-                                    modifier = Modifier.testTag("engine_gemini_radio")
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Column {
-                                    Text("Gemini Direct API (Recommended)", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
-                                    Text("No setup needed. Runs immediately in-app.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Custom Ollama VPS Toggle
+                        // 1. Offline Demo Practice Mode
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -2899,7 +3726,9 @@ fun SettingsScreen(
                                         inputApiKey,
                                         inputModel,
                                         ttsEnabled,
-                                        correctionsEnabled
+                                        correctionsEnabled,
+                                        inputGeminiApiKey,
+                                        true
                                     )
                                 },
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -2907,9 +3736,123 @@ fun SettingsScreen(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 RadioButton(
-                                    selected = !useGeminiDirect,
+                                    selected = useDemoMode,
                                     onClick = {
-                                        viewModel.updateSettings(false, inputUrl, inputApiKey, inputModel, ttsEnabled, correctionsEnabled)
+                                        viewModel.updateSettings(false, inputUrl, inputApiKey, inputModel, ttsEnabled, correctionsEnabled, inputGeminiApiKey, true)
+                                    },
+                                    colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF8B5CF6)),
+                                    modifier = Modifier.testTag("engine_demo_radio")
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Column {
+                                    Text("Offline Demo Practice Mode", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+                                    Text("Start practicing instantly. No API key required!", style = MaterialTheme.typography.labelSmall, color = Color(0xFF10B981))
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // 2. Gemini Direct Toggle
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.updateSettings(
+                                        true,
+                                        inputUrl,
+                                        inputApiKey,
+                                        inputModel,
+                                        ttsEnabled,
+                                        correctionsEnabled,
+                                        inputGeminiApiKey,
+                                        false
+                                    )
+                                },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(
+                                    selected = useGeminiDirect && !useDemoMode,
+                                    onClick = {
+                                        viewModel.updateSettings(true, inputUrl, inputApiKey, inputModel, ttsEnabled, correctionsEnabled, inputGeminiApiKey, false)
+                                    },
+                                    colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF8B5CF6)),
+                                    modifier = Modifier.testTag("engine_gemini_radio")
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Column {
+                                    Text("Gemini Direct API (Recommended)", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+                                    Text("Runs immediately using your Gemini API key.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                                }
+                            }
+                        }
+
+                        if (useGeminiDirect && !useDemoMode) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 4.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "Configure Gemini API",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = Color(0xFF8B5CF6)
+                                )
+                                OutlinedTextField(
+                                    value = inputGeminiApiKey,
+                                    onValueChange = { 
+                                        inputGeminiApiKey = it 
+                                        viewModel.updateSettings(true, inputUrl, inputApiKey, inputModel, ttsEnabled, correctionsEnabled, it, false)
+                                    },
+                                    label = { Text("Your Gemini API Key") },
+                                    placeholder = { Text("Enter key (starting with AIzaSy...)") },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("gemini_api_key_input"),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = Color(0xFF8B5CF6),
+                                        unfocusedBorderColor = if (isDark) Color(0x2BFFFFFF) else Color(0x3D000000)
+                                    ),
+                                    singleLine = true
+                                )
+                                Text(
+                                    text = "Your API key is saved locally on your device. You can get a free key by searching for 'Google AI Studio API Key'.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // 3. Custom Ollama VPS Toggle
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.updateSettings(
+                                        false,
+                                        inputUrl,
+                                        inputApiKey,
+                                        inputModel,
+                                        ttsEnabled,
+                                        correctionsEnabled,
+                                        inputGeminiApiKey,
+                                        false
+                                    )
+                                },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(
+                                    selected = !useGeminiDirect && !useDemoMode,
+                                    onClick = {
+                                        viewModel.updateSettings(false, inputUrl, inputApiKey, inputModel, ttsEnabled, correctionsEnabled, inputGeminiApiKey, false)
                                     },
                                     colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF8B5CF6)),
                                     modifier = Modifier.testTag("engine_vps_radio")
@@ -2926,7 +3869,7 @@ fun SettingsScreen(
             }
 
             // Custom Server Configuration Fields (Shown if VPS selected)
-            if (!useGeminiDirect) {
+            if (!useGeminiDirect && !useDemoMode) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -2953,9 +3896,9 @@ fun SettingsScreen(
                                     .fillMaxWidth()
                                     .testTag("vps_url_input"),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color(0xFF8B5CF6),
-                                    unfocusedBorderColor = if (isDark) Color(0x2BFFFFFF) else Color(0x3D000000)
-                                ),
+                                        focusedBorderColor = Color(0xFF8B5CF6),
+                                        unfocusedBorderColor = if (isDark) Color(0x2BFFFFFF) else Color(0x3D000000)
+                                    ),
                                 singleLine = true
                             )
 
@@ -2968,9 +3911,9 @@ fun SettingsScreen(
                                     .fillMaxWidth()
                                     .testTag("vps_key_input"),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color(0xFF8B5CF6),
-                                    unfocusedBorderColor = if (isDark) Color(0x2BFFFFFF) else Color(0x3D000000)
-                                ),
+                                        focusedBorderColor = Color(0xFF8B5CF6),
+                                        unfocusedBorderColor = if (isDark) Color(0x2BFFFFFF) else Color(0x3D000000)
+                                    ),
                                 singleLine = true
                             )
 
@@ -2983,9 +3926,9 @@ fun SettingsScreen(
                                     .fillMaxWidth()
                                     .testTag("vps_model_input"),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color(0xFF8B5CF6),
-                                    unfocusedBorderColor = if (isDark) Color(0x2BFFFFFF) else Color(0x3D000000)
-                                ),
+                                        focusedBorderColor = Color(0xFF8B5CF6),
+                                        unfocusedBorderColor = if (isDark) Color(0x2BFFFFFF) else Color(0x3D000000)
+                                    ),
                                 singleLine = true
                             )
 
@@ -2997,7 +3940,8 @@ fun SettingsScreen(
                                         inputApiKey,
                                         inputModel,
                                         ttsEnabled,
-                                        correctionsEnabled
+                                        correctionsEnabled,
+                                        inputGeminiApiKey
                                     )
                                 },
                                 modifier = Modifier

@@ -43,8 +43,20 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     private val _ttsEnabled = MutableStateFlow(prefs.ttsEnabled)
     val ttsEnabled: StateFlow<Boolean> = _ttsEnabled.asStateFlow()
 
+    private val _ttsRate = MutableStateFlow(prefs.ttsRate)
+    val ttsRate: StateFlow<Float> = _ttsRate.asStateFlow()
+
+    private val _ttsLocale = MutableStateFlow(prefs.ttsLocale)
+    val ttsLocale: StateFlow<String> = _ttsLocale.asStateFlow()
+
     private val _correctionsEnabled = MutableStateFlow(prefs.correctionsEnabled)
     val correctionsEnabled: StateFlow<Boolean> = _correctionsEnabled.asStateFlow()
+
+    private val _geminiApiKey = MutableStateFlow(prefs.geminiApiKey)
+    val geminiApiKey: StateFlow<String> = _geminiApiKey.asStateFlow()
+
+    private val _useDemoMode = MutableStateFlow(prefs.useDemoMode)
+    val useDemoMode: StateFlow<Boolean> = _useDemoMode.asStateFlow()
 
     // --- Vocabulary & Daily practice tracking states ---
     val allVocabularyWords: StateFlow<List<VocabularyWord>> = repository.allVocabularyWords
@@ -265,6 +277,102 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         _correctionsEnabled.value = corrections
     }
 
+    fun updateSettings(
+        useGemini: Boolean,
+        url: String,
+        apiKey: String,
+        model: String,
+        tts: Boolean,
+        corrections: Boolean,
+        gKey: String
+    ) {
+        prefs.geminiApiKey = gKey
+        _geminiApiKey.value = gKey
+        updateSettings(useGemini, url, apiKey, model, tts, corrections)
+    }
+
+    fun updateSettings(
+        useGemini: Boolean,
+        url: String,
+        apiKey: String,
+        model: String,
+        tts: Boolean,
+        corrections: Boolean,
+        gKey: String,
+        demoMode: Boolean
+    ) {
+        prefs.geminiApiKey = gKey
+        _geminiApiKey.value = gKey
+        prefs.useDemoMode = demoMode
+        _useDemoMode.value = demoMode
+        updateSettings(useGemini, url, apiKey, model, tts, corrections)
+    }
+
+    fun enableDemoMode() {
+        prefs.useDemoMode = true
+        _useDemoMode.value = true
+        prefs.useGeminiDirect = false
+        _useGeminiDirect.value = false
+    }
+
+    fun updateTtsRate(rate: Float) {
+        prefs.ttsRate = rate
+        _ttsRate.value = rate
+    }
+
+    fun updateTtsLocale(locale: String) {
+        prefs.ttsLocale = locale
+        _ttsLocale.value = locale
+    }
+
+    fun switchToDemoModeAndRetry(errorMessageId: String, onSpeak: (String) -> Unit) {
+        val session = _currentSession.value ?: return
+        viewModelScope.launch {
+            // 1. Enable Demo Mode
+            enableDemoMode()
+            
+            // 2. Delete the error message
+            repository.deleteMessage(errorMessageId)
+            
+            // 3. Insert empty/placeholder message for tutor response streaming in demo mode
+            _isTutorThinking.value = true
+            val tutorMsgId = UUID.randomUUID().toString()
+            var tutorMsgText = ""
+            val tutorMsg = ChatMessage(
+                id = tutorMsgId,
+                sessionId = session.id,
+                sender = "tutor",
+                text = "",
+                timestamp = System.currentTimeMillis() + 10
+            )
+            repository.insertMessage(tutorMsg)
+            
+            // 4. Gather history (excluding the deleted error message)
+            val conversationHistory = _currentMessages.value.filter { it.id != errorMessageId }
+            
+            // 5. Stream response
+            apiService.generateTutorResponseStream(
+                conversationId = session.id,
+                level = session.level,
+                topic = session.topic,
+                messages = conversationHistory,
+                onChunk = { chunk ->
+                    tutorMsgText += chunk
+                    viewModelScope.launch {
+                        repository.insertMessage(tutorMsg.copy(text = tutorMsgText))
+                    }
+                    _isTutorThinking.value = false
+                }
+            )
+            
+            _isTutorThinking.value = false
+            
+            if (prefs.ttsEnabled && tutorMsgText.isNotEmpty()) {
+                onSpeak(tutorMsgText)
+            }
+        }
+    }
+
     fun sendMessage(userText: String, onSpeak: (String) -> Unit) {
         val session = _currentSession.value ?: return
         if (userText.trim().isEmpty()) return
@@ -290,12 +398,24 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
                     if (correctionResponse != null && correctionResponse.corrected != userText) {
                         // Check if explanations exist
                         val serializedCorrections = if (correctionResponse.explanations.isNotEmpty()) {
-                            // Turn explanations list into a clean JSON array or simplified text list
-                            val sb = StringBuilder()
-                            correctionResponse.explanations.forEach { exp ->
-                                sb.append("• \"${exp.original}\" -> \"${exp.fixed}\": ${exp.reason}\n")
+                            try {
+                                val jsonArray = org.json.JSONArray()
+                                correctionResponse.explanations.forEach { exp ->
+                                    val obj = org.json.JSONObject()
+                                    obj.put("original", exp.original)
+                                    obj.put("fixed", exp.fixed)
+                                    obj.put("reason", exp.reason)
+                                    jsonArray.put(obj)
+                                }
+                                jsonArray.toString()
+                            } catch (e: Exception) {
+                                // fallback to bulleted format if JSON creation fails
+                                val sb = StringBuilder()
+                                correctionResponse.explanations.forEach { exp ->
+                                    sb.append("• \"${exp.original}\" -> \"${exp.fixed}\": ${exp.reason}\n")
+                                }
+                                sb.toString().trim()
                             }
-                            sb.toString().trim()
                         } else {
                             ""
                         }
