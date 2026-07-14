@@ -128,3 +128,9 @@ This starts Ollama and the FastAPI backend together. Make sure to:
 ## License
 
 Personal/portfolio project.
+
+<img width="1440" height="2560" alt="image" src="https://github.com/user-attachments/assets/4df63612-9362-48ec-82b5-aee9c95de317" />
+<img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/cc24529c-1f50-4e0c-bd3f-73b1977073ea" />
+<img width="2176" height="1632" alt="image" src="https://github.com/user-attachments/assets/07f69964-b4ee-4652-9b28-a290b03a1bad" />
+<img width="2176" height="1632" alt="image" src="https://github.com/user-attachments/assets/b328e209-5731-432d-b143-cf5c997d8807" />
+<img width="2176" height="1632" alt="image" src="https://github.com/user-attachments/assets/65321f6a-1581-4427-be47-eef4694aaf36" />
