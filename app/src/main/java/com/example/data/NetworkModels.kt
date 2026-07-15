@@ -21,7 +21,8 @@ data class CorrectionExplanation(
 @JsonClass(generateAdapter = true)
 data class CustomCorrectionResponse(
     val corrected: String,
-    val explanations: List<CorrectionExplanation> = emptyList()
+    val explanations: List<CorrectionExplanation> = emptyList(),
+    val corrections: List<CorrectionExplanation> = emptyList()
 )
 
 @JsonClass(generateAdapter = true)

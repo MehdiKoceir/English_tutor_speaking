@@ -24,7 +24,17 @@ class PreferencesHelper(context: Context) {
     }
 
     var useGeminiDirect: Boolean
-        get() = prefs.getBoolean(KEY_USE_GEMINI_DIRECT, false) // Default to false when Offline Demo Mode is default
+        get() {
+            if (!prefs.contains(KEY_USE_GEMINI_DIRECT)) {
+                val userKey = prefs.getString(KEY_GEMINI_API_KEY, "") ?: ""
+                val buildKey = com.example.BuildConfig.GEMINI_API_KEY.trim()
+                val hasApiKey = userKey.isNotEmpty() || (buildKey.isNotEmpty() && buildKey != "MY_GEMINI_API_KEY" && buildKey != "AIzaSyDvGns0KeM1GSD53vN79HJ0XQccg6_cpgY")
+                if (hasApiKey) {
+                    return true
+                }
+            }
+            return prefs.getBoolean(KEY_USE_GEMINI_DIRECT, false)
+        }
         set(value) = prefs.edit().putBoolean(KEY_USE_GEMINI_DIRECT, value).apply()
 
     var ollamaUrl: String
@@ -52,16 +62,34 @@ class PreferencesHelper(context: Context) {
         set(value) = prefs.edit().putString(KEY_GEMINI_API_KEY, value).apply()
 
     var useDemoMode: Boolean
-        get() = prefs.getBoolean("use_demo_mode", true) // Default to Demo Mode so the app works instantly!
+        get() {
+            if (!prefs.contains("use_demo_mode")) {
+                val userKey = prefs.getString(KEY_GEMINI_API_KEY, "") ?: ""
+                val buildKey = com.example.BuildConfig.GEMINI_API_KEY.trim()
+                val hasApiKey = userKey.isNotEmpty() || (buildKey.isNotEmpty() && buildKey != "MY_GEMINI_API_KEY" && buildKey != "AIzaSyDvGns0KeM1GSD53vN79HJ0XQccg6_cpgY")
+                if (hasApiKey) {
+                    return false
+                }
+            }
+            return prefs.getBoolean("use_demo_mode", true)
+        }
         set(value) = prefs.edit().putBoolean("use_demo_mode", value).apply()
 
     var ttsRate: Float
         get() = prefs.getFloat("tts_rate", 1.0f)
         set(value) = prefs.edit().putFloat("tts_rate", value).apply()
 
+    var ttsPitch: Float
+        get() = prefs.getFloat("tts_pitch", 1.0f)
+        set(value) = prefs.edit().putFloat("tts_pitch", value).apply()
+
     var ttsLocale: String
         get() = prefs.getString("tts_locale", "US") ?: "US"
         set(value) = prefs.edit().putString("tts_locale", value).apply()
+
+    var ttsVoiceName: String?
+        get() = prefs.getString("tts_voice_name", null)
+        set(value) = prefs.edit().putString("tts_voice_name", value).apply()
 
     var currentSessionId: String?
         get() = prefs.getString("current_session_id", null)

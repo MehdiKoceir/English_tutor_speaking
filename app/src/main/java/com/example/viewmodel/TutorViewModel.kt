@@ -46,8 +46,17 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     private val _ttsRate = MutableStateFlow(prefs.ttsRate)
     val ttsRate: StateFlow<Float> = _ttsRate.asStateFlow()
 
+    private val _ttsPitch = MutableStateFlow(prefs.ttsPitch)
+    val ttsPitch: StateFlow<Float> = _ttsPitch.asStateFlow()
+
     private val _ttsLocale = MutableStateFlow(prefs.ttsLocale)
     val ttsLocale: StateFlow<String> = _ttsLocale.asStateFlow()
+
+    private val _ttsVoiceName = MutableStateFlow(prefs.ttsVoiceName)
+    val ttsVoiceName: StateFlow<String?> = _ttsVoiceName.asStateFlow()
+
+    private val _availableVoices = MutableStateFlow<List<String>>(emptyList())
+    val availableVoices: StateFlow<List<String>> = _availableVoices.asStateFlow()
 
     private val _correctionsEnabled = MutableStateFlow(prefs.correctionsEnabled)
     val correctionsEnabled: StateFlow<Boolean> = _correctionsEnabled.asStateFlow()
@@ -254,6 +263,28 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun resetCurrentSession(onSpeak: ((String) -> Unit)? = null) {
+        val session = _currentSession.value ?: return
+        viewModelScope.launch {
+            _isTutorThinking.value = false
+            database.tutorDao().deleteMessagesForSession(session.id)
+            
+            // Re-insert the introductory message based on level and topic
+            val introText = getIntroText(session.level, session.topic)
+            val introMsg = ChatMessage(
+                id = UUID.randomUUID().toString(),
+                sessionId = session.id,
+                sender = "tutor",
+                text = introText,
+                timestamp = System.currentTimeMillis()
+            )
+            repository.insertMessage(introMsg)
+            if (prefs.ttsEnabled && onSpeak != null && introText.isNotEmpty()) {
+                onSpeak(introText)
+            }
+        }
+    }
+
     fun updateSettings(
         useGemini: Boolean,
         url: String,
@@ -320,9 +351,23 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         _ttsRate.value = rate
     }
 
+    fun updateTtsPitch(pitch: Float) {
+        prefs.ttsPitch = pitch
+        _ttsPitch.value = pitch
+    }
+
     fun updateTtsLocale(locale: String) {
         prefs.ttsLocale = locale
         _ttsLocale.value = locale
+    }
+
+    fun updateTtsVoiceName(voiceName: String?) {
+        prefs.ttsVoiceName = voiceName
+        _ttsVoiceName.value = voiceName
+    }
+
+    fun updateAvailableVoices(voices: List<String>) {
+        _availableVoices.value = voices
     }
 
     fun switchToDemoModeAndRetry(errorMessageId: String, onSpeak: (String) -> Unit) {
@@ -396,11 +441,17 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
                 launch {
                     val correctionResponse = apiService.getCorrections(userText)
                     if (correctionResponse != null && correctionResponse.corrected != userText) {
-                        // Check if explanations exist
-                        val serializedCorrections = if (correctionResponse.explanations.isNotEmpty()) {
+                        // Check if corrections or explanations exist
+                        val correctionsList = if (correctionResponse.corrections.isNotEmpty()) {
+                            correctionResponse.corrections
+                        } else {
+                            correctionResponse.explanations
+                        }
+                        
+                        val serializedCorrections = if (correctionsList.isNotEmpty()) {
                             try {
                                 val jsonArray = org.json.JSONArray()
-                                correctionResponse.explanations.forEach { exp ->
+                                correctionsList.forEach { exp ->
                                     val obj = org.json.JSONObject()
                                     obj.put("original", exp.original)
                                     obj.put("fixed", exp.fixed)
@@ -411,7 +462,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
                             } catch (e: Exception) {
                                 // fallback to bulleted format if JSON creation fails
                                 val sb = StringBuilder()
-                                correctionResponse.explanations.forEach { exp ->
+                                correctionsList.forEach { exp ->
                                     sb.append("• \"${exp.original}\" -> \"${exp.fixed}\": ${exp.reason}\n")
                                 }
                                 sb.toString().trim()

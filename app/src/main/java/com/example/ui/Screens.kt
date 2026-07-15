@@ -128,8 +128,8 @@ fun MainAppNavigation(
                     NavigationBarItem(
                         selected = currentScreen == Screen.Home,
                         onClick = { currentScreen = Screen.Home },
-                        label = { Text("Tutor") },
-                        icon = { Icon(Icons.Default.School, contentDescription = "Tutor") },
+                        label = { Text("AhdrAnglais") },
+                        icon = { Icon(Icons.Default.School, contentDescription = "AhdrAnglais") },
                         colors = itemColors,
                         modifier = Modifier.testTag("nav_home")
                     )
@@ -296,13 +296,13 @@ fun WelcomeScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Translate,
-                        contentDescription = "AuraTalk Logo",
+                        contentDescription = "AhdrAnglais Logo",
                         tint = Color.White,
                         modifier = Modifier.size(24.dp)
                     )
                 }
                 Text(
-                    text = "AuraTalk AI",
+                    text = "AhdrAnglais",
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = 0.5.sp
@@ -528,7 +528,10 @@ fun HomeScreen(
         TopicItem("Job Interview", Icons.Default.Work, "Mock interview practice with typical professional questions."),
         TopicItem("Travel", Icons.Default.FlightTakeoff, "Practice ordering food, hotel booking, and asking directions."),
         TopicItem("Daily Life", Icons.Default.Home, "Talk about hobbies, routines, and daily activities."),
-        TopicItem("Business", Icons.Default.BusinessCenter, "Formal discussions, networking, and presentation prep.")
+        TopicItem("Business", Icons.Default.BusinessCenter, "Formal discussions, networking, and presentation prep."),
+        TopicItem("Academic", Icons.Default.School, "Structured formal debate, academic writing, and essay structures."),
+        TopicItem("Science & Tech", Icons.Default.Laptop, "Innovations, coding, AI advancements, and engineering concepts."),
+        TopicItem("Medical & Health", Icons.Default.Favorite, "Healthy routines, preventative care, nutrition, and wellness tips.")
     )
 
     LazyColumn(
@@ -572,7 +575,7 @@ fun HomeScreen(
                     }
                     Column {
                         Text(
-                            text = "LingoTutor",
+                            text = "AhdrAnglais",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onBackground
                         )
@@ -1184,6 +1187,18 @@ fun HomeScreen(
                                         if (isDark) Color(0x2B9C27B0) else Color(0xFFFAF5FF),
                                         Color(0xFF7C3AED)
                                     )
+                                    "Academic" -> Pair(
+                                        if (isDark) Color(0x2B10B981) else Color(0xFFECFDF5),
+                                        Color(0xFF059669)
+                                    )
+                                    "Science & Tech" -> Pair(
+                                        if (isDark) Color(0x2B06B6D4) else Color(0xFFECFEFF),
+                                        Color(0xFF0891B2)
+                                    )
+                                    "Medical & Health" -> Pair(
+                                        if (isDark) Color(0x2BF43F5E) else Color(0xFFFFF1F2),
+                                        Color(0xFFE11D48)
+                                    )
                                     else -> Pair(
                                         if (isDark) Color(0x2B8B5CF6) else Color(0xFFF5F3FF),
                                         Color(0xFF8B5CF6)
@@ -1337,7 +1352,7 @@ private fun generateTranscriptText(
     elapsedSeconds: Int
 ): String {
     val sb = StringBuilder()
-    sb.append("=== LingoTutor Conversation Practice Transcript ===\n")
+    sb.append("=== AhdrAnglais Conversation Practice Transcript ===\n")
     if (session != null) {
         sb.append("Topic: ${session.topic}\n")
         sb.append("Proficiency Level: ${session.level}\n")
@@ -1380,6 +1395,8 @@ fun ChatScreen(
     val messages by viewModel.currentMessages.collectAsState()
     val isTutorThinking by viewModel.isTutorThinking.collectAsState()
     val ttsEnabled by viewModel.ttsEnabled.collectAsState()
+    val useGeminiDirect by viewModel.useGeminiDirect.collectAsState()
+    val useDemoMode by viewModel.useDemoMode.collectAsState()
     val isDark = isSystemInDarkTheme()
 
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -1394,6 +1411,8 @@ fun ChatScreen(
     var selectedMessage by remember { mutableStateOf<ChatMessage?>(null) }
     var showEditMessageDialog by remember { mutableStateOf(false) }
     var editMessageText by remember { mutableStateOf("") }
+    var showResetDialog by remember { mutableStateOf(false) }
+    var showFeedbackPanel by remember { mutableStateOf(false) }
 
     var elapsedSeconds by remember { mutableStateOf(0) }
     LaunchedEffect(session?.id) {
@@ -1417,11 +1436,60 @@ fun ChatScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text(
-                            text = session?.topic ?: "Conversation",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        var themeMenuExpanded by remember { mutableStateOf(false) }
+                        Box {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier
+                                    .clickable { themeMenuExpanded = true }
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .padding(vertical = 4.dp, horizontal = 4.dp)
+                                    .testTag("chat_theme_selector_trigger")
+                            ) {
+                                Text(
+                                    text = session?.topic ?: "Conversation",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = "Select specific conversational theme",
+                                    tint = Color(0xFF8B5CF6),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            
+                            DropdownMenu(
+                                expanded = themeMenuExpanded,
+                                onDismissRequest = { themeMenuExpanded = false },
+                                modifier = Modifier
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .border(1.dp, if (isDark) Color(0x1AFFFFFF) else Color(0x1F000000), RoundedCornerShape(8.dp))
+                            ) {
+                                val availableThemes = listOf(
+                                    "Free Talk", "Business", "Travel", "Daily Life", "Job Interview", "Academic", "Science & Tech", "Medical & Health"
+                                )
+                                availableThemes.forEach { themeName ->
+                                    DropdownMenuItem(
+                                        text = { 
+                                            Text(
+                                                text = themeName, 
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = if (session?.topic == themeName) FontWeight.Bold else FontWeight.Normal
+                                            ) 
+                                        },
+                                        onClick = {
+                                            themeMenuExpanded = false
+                                            session?.id?.let { sid ->
+                                                viewModel.updateSessionTopic(sid, themeName)
+                                            }
+                                        },
+                                        modifier = Modifier.testTag("theme_option_${themeName.replace(" ", "_").replace("&", "And")}")
+                                    )
+                                }
+                            }
+                        }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -1481,7 +1549,7 @@ fun ChatScreen(
                     // Export/Share transcript button
                     IconButton(
                         onClick = {
-                            val defaultFileName = "LingoTutor_Transcript_${session?.topic?.replace(" ", "_") ?: "Conversation"}.txt"
+                            val defaultFileName = "AhdrAnglais_Transcript_${session?.topic?.replace(" ", "_") ?: "Conversation"}.txt"
                             createDocumentLauncher.launch(defaultFileName)
                         },
                         modifier = Modifier.testTag("export_transcript_button")
@@ -1515,6 +1583,38 @@ fun ChatScreen(
                             tint = if (ttsEnabled) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Feedback Center Toggle Button
+                    IconButton(
+                        onClick = {
+                            showFeedbackPanel = !showFeedbackPanel
+                        },
+                        modifier = Modifier.testTag("feedback_center_toggle")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Spellcheck,
+                            contentDescription = "Open Feedback & Grammar Center",
+                            tint = Color(0xFF8B5CF6)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Reset Conversation button
+                    IconButton(
+                        onClick = {
+                            showResetDialog = true
+                        },
+                        modifier = Modifier.testTag("reset_conversation_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Reset Conversation",
+                            tint = Color(0xFF8B5CF6)
+                        )
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
@@ -1528,11 +1628,151 @@ fun ChatScreen(
         },
         containerColor = Color.Transparent
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
+        if (showResetDialog) {
+            AlertDialog(
+                onDismissRequest = { showResetDialog = false },
+                title = {
+                    Text(
+                        text = "Reset Conversation?",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                },
+                text = {
+                    Text(
+                        text = "This will permanently clear your conversation history for this session and start over. Are you sure?",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showResetDialog = false
+                            viewModel.resetCurrentSession(onSpeak)
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Reset", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showResetDialog = false }) {
+                        Text("Cancel", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            )
+        }
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+            // AI Service Status Indicator
+            val isDemo = useDemoMode
+            val isGemini = useGeminiDirect && !useDemoMode
+
+            androidx.compose.animation.AnimatedVisibility(visible = true) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = when {
+                            isDemo -> if (isDark) Color(0x1F10B981) else Color(0xFFECFDF5)
+                            isGemini -> if (isDark) Color(0x1F8B5CF6) else Color(0xFFF5F3FF)
+                            else -> if (isDark) Color(0x1F3B82F6) else Color(0xFFEFF6FF)
+                        }
+                    ),
+                    border = BorderStroke(
+                        1.dp,
+                        when {
+                            isDemo -> Color(0x3310B981)
+                            isGemini -> Color(0x338B5CF6)
+                            else -> Color(0x333B82F6)
+                        }
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        when {
+                                            isDemo -> Color(0xFF10B981)
+                                            isGemini -> Color(0xFF8B5CF6)
+                                            else -> Color(0xFF3B82F6)
+                                        }
+                                    )
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = when {
+                                        isDemo -> "Offline Practice Mode"
+                                        isGemini -> "Gemini Live AI Connected"
+                                        else -> "Custom VPS Server"
+                                    },
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = when {
+                                        isDemo -> if (isDark) Color(0xFF34D399) else Color(0xFF065F46)
+                                        isGemini -> if (isDark) Color(0xFFA78BFA) else Color(0xFF5B21B6)
+                                        else -> if (isDark) Color(0xFF60A5FA) else Color(0xFF1E40AF)
+                                    }
+                                )
+                                Text(
+                                    text = when {
+                                        isDemo -> "Using pre-configured offline responses."
+                                        isGemini -> "Real-time, highly intelligent feedback."
+                                        else -> "Connected to Ollama host."
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                        
+                        if (isDemo) {
+                            Button(
+                                onClick = {
+                                    viewModel.updateSettings(
+                                        true, // useGemini
+                                        viewModel.ollamaUrl.value,
+                                        viewModel.ollamaApiKey.value,
+                                        viewModel.ollamaModel.value,
+                                        viewModel.ttsEnabled.value,
+                                        viewModel.correctionsEnabled.value,
+                                        viewModel.geminiApiKey.value,
+                                        false // demoMode
+                                    )
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF8B5CF6),
+                                    contentColor = Color.White
+                                ),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Text("Go Live", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
+                            }
+                        }
+                    }
+                }
+            }
+
             // Chat Message List
             LazyColumn(
                 state = lazyListState,
@@ -1670,6 +1910,27 @@ fun ChatScreen(
                         )
                     }
                 }
+            }
+        }
+            
+        AnimatedVisibility(
+            visible = showFeedbackPanel,
+                enter = slideInVertically(
+                    initialOffsetY = { it },
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                ),
+                exit = slideOutVertically(
+                    targetOffsetY = { it },
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                ),
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
+                FeedbackCenterPanel(
+                    messages = messages,
+                    isDark = isDark,
+                    onDismiss = { showFeedbackPanel = false },
+                    onSpeak = onSpeak
+                )
             }
         }
     }
@@ -2185,11 +2446,60 @@ fun MessageBubble(
                                 }
                             }
                         } else {
-                            Text(
-                                text = message.text,
-                                color = if (isUser) Color.White else MaterialTheme.colorScheme.onSurface,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
+                            val tutorHighlights = remember(message.text) {
+                                if (!isUser) parseAiResponseForCorrections(message.text) else emptyList()
+                            }
+                            if (!isUser && tutorHighlights.isNotEmpty()) {
+                                val annotatedTutorText = remember(message.text, tutorHighlights) {
+                                    buildAnnotatedString {
+                                        append(message.text)
+                                        tutorHighlights.forEach { highlight ->
+                                            if (highlight.original.isNotEmpty()) {
+                                                var startIndex = message.text.indexOf(highlight.original)
+                                                while (startIndex != -1) {
+                                                    addStyle(
+                                                        style = SpanStyle(
+                                                            color = if (isDark) Color(0xFFF87171) else Color(0xFFDC2626),
+                                                            textDecoration = TextDecoration.LineThrough,
+                                                            background = if (isDark) Color(0x33EF4444) else Color(0xFFFEE2E2),
+                                                            fontWeight = FontWeight.Medium
+                                                        ),
+                                                        start = startIndex,
+                                                        end = startIndex + highlight.original.length
+                                                    )
+                                                    startIndex = message.text.indexOf(highlight.original, startIndex + highlight.original.length)
+                                                }
+                                            }
+                                            if (highlight.fixed.isNotEmpty()) {
+                                                var startIndex = message.text.indexOf(highlight.fixed)
+                                                while (startIndex != -1) {
+                                                    addStyle(
+                                                        style = SpanStyle(
+                                                            color = if (isDark) Color(0xFF34D399) else Color(0xFF059669),
+                                                            fontWeight = FontWeight.Bold,
+                                                            background = if (isDark) Color(0x3310B981) else Color(0xFFD1FAE5)
+                                                        ),
+                                                        start = startIndex,
+                                                        end = startIndex + highlight.fixed.length
+                                                    )
+                                                    startIndex = message.text.indexOf(highlight.fixed, startIndex + highlight.fixed.length)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Text(
+                                    text = annotatedTutorText,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            } else {
+                                Text(
+                                    text = message.text,
+                                    color = if (isUser) Color.White else MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
                         }
                     }
                 }
@@ -2622,6 +2932,71 @@ data class CorrectionItem(
     val reason: String
 )
 
+fun parseAiResponseForCorrections(text: String): List<CorrectionItem> {
+    val corrections = mutableListOf<CorrectionItem>()
+    if (text.isBlank()) return corrections
+
+    // Pattern 1: Instead of "original", you should say "fixed"
+    val pattern1 = Regex("""(?:Instead of|instead of)\s+['"“]([^'"“”]+)['"”],\s+(?:you should say|you should use|say|use|it's better to say)\s+['"“]([^'"“”]+)['"”](?:\s+because\s+([^.\n]+))?""", RegexOption.IGNORE_CASE)
+    
+    // Pattern 2: "original" should be "fixed"
+    val pattern2 = Regex("""['"“]([^'"“”]+)['"”]\s+(?:should be|could be changed to|is better as|is corrected to)\s+['"“]([^'"“”]+)['"”](?:\s*-\s*([^.\n]+))?""", RegexOption.IGNORE_CASE)
+    
+    // Pattern 3: Change "original" to "fixed"
+    val pattern3 = Regex("""(?:Change|change)\s+['"“]([^'"“”]+)['"”]\s+to\s+['"“]([^'"密“”]+)['"”](?:\s+because\s+([^.\n]+))?""", RegexOption.IGNORE_CASE)
+    
+    // Pattern 4: You said "original", but it should be "fixed"
+    val pattern4 = Regex("""(?:You said|you said)\s+['"“]([^'"“”]+)['"”],\s+(?:but\s+)?(?:it\s+)?(?:should\s+be|is)\s+['"“]([^'"密“”]+)['"”](?:\s*[:,-]\s*([^.\n]+))?""", RegexOption.IGNORE_CASE)
+
+    // Match all Pattern 1
+    pattern1.findAll(text).forEach { match ->
+        val original = match.groupValues[1].trim()
+        val fixed = match.groupValues[2].trim()
+        val reason = match.groupValues.getOrNull(3)?.trim()?.ifBlank { "Grammar correction" } ?: "Grammar correction"
+        if (original.isNotEmpty() && fixed.isNotEmpty()) {
+            corrections.add(CorrectionItem(original, fixed, reason))
+        }
+    }
+
+    // Match all Pattern 2
+    pattern2.findAll(text).forEach { match ->
+        val original = match.groupValues[1].trim()
+        val fixed = match.groupValues[2].trim()
+        val reason = match.groupValues.getOrNull(3)?.trim()?.ifBlank { "Suggested change" } ?: "Suggested change"
+        if (original.isNotEmpty() && fixed.isNotEmpty()) {
+            if (corrections.none { it.original == original && it.fixed == fixed }) {
+                corrections.add(CorrectionItem(original, fixed, reason))
+            }
+        }
+    }
+
+    // Match all Pattern 3
+    pattern3.findAll(text).forEach { match ->
+        val original = match.groupValues[1].trim()
+        val fixed = match.groupValues[2].trim()
+        val reason = match.groupValues.getOrNull(3)?.trim()?.ifBlank { "Improved phrasing" } ?: "Improved phrasing"
+        if (original.isNotEmpty() && fixed.isNotEmpty()) {
+            if (corrections.none { it.original == original && it.fixed == fixed }) {
+                corrections.add(CorrectionItem(original, fixed, reason))
+            }
+        }
+    }
+
+    // Match all Pattern 4
+    pattern4.findAll(text).forEach { match ->
+        val original = match.groupValues[1].trim()
+        val fixed = match.groupValues[2].trim()
+        val reason = match.groupValues.getOrNull(3)?.trim()?.ifBlank { "Grammatical correction" } ?: "Grammatical correction"
+        if (original.isNotEmpty() && fixed.isNotEmpty()) {
+            if (corrections.none { it.original == original && it.fixed == fixed }) {
+                corrections.add(CorrectionItem(original, fixed, reason))
+            }
+        }
+    }
+
+    return corrections
+}
+
 fun parseCorrections(correctionsJson: String?): List<CorrectionItem> {
     if (correctionsJson.isNullOrBlank()) return emptyList()
     
@@ -2927,6 +3302,430 @@ fun CorrectionExplanationCard(
 }
 
 @Composable
+fun FeedbackCenterPanel(
+    messages: List<ChatMessage>,
+    isDark: Boolean,
+    onDismiss: () -> Unit,
+    onSpeak: (String) -> Unit
+) {
+    var selectedTab by remember { mutableStateOf(0) } // 0: User Mistakes, 1: Tutor Explanations
+    
+    val surfaceColor = if (isDark) Color(0xFF13111C) else Color(0xFFFBFBFE)
+    val borderColor = if (isDark) Color(0x338B5CF6) else Color(0x1F8B5CF6)
+    val textColor = if (isDark) Color.White else Color(0xFF1F2937)
+    
+    // Process User Corrections
+    val userMessagesWithCorrections = remember(messages) {
+        messages.filter { it.sender == "user" && !it.correctedText.isNullOrBlank() }
+    }
+    
+    // Process Tutor Conversational Corrections
+    val tutorMessagesWithFeedback = remember(messages) {
+        messages.filter { it.sender != "user" }.mapNotNull { msg ->
+            val parsed = parseAiResponseForCorrections(msg.text)
+            if (parsed.isNotEmpty()) {
+                msg to parsed
+            } else {
+                null
+            }
+        }
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxHeight(0.65f) // occupies 65% of screen height
+            .border(BorderStroke(1.dp, borderColor), RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        colors = CardDefaults.cardColors(containerColor = surfaceColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 12.dp)
+        ) {
+            // Drag handle decorator
+            Box(
+                modifier = Modifier
+                    .width(40.dp)
+                    .height(4.dp)
+                    .clip(CircleShape)
+                    .background(if (isDark) Color(0x33FFFFFF) else Color(0x1A000000))
+                    .align(Alignment.CenterHorizontally)
+            )
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Header Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Spellcheck,
+                            contentDescription = "Feedback icon",
+                            tint = Color(0xFF8B5CF6),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Text(
+                            text = "Grammar Feedback Center",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
+                            color = textColor
+                        )
+                    }
+                    Text(
+                        text = "Review suggestions and improve your English speaking",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+                
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(if (isDark) Color(0x1AFFFFFF) else Color(0x0A000000), CircleShape)
+                        .testTag("close_feedback_panel_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close Panel",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Custom premium Tabs/Segments selector
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (isDark) Color(0x14FFFFFF) else Color(0x08000000))
+                    .padding(4.dp)
+            ) {
+                val userCorrectionsCount = userMessagesWithCorrections.size
+                val tutorFeedbackCount = tutorMessagesWithFeedback.sumOf { it.second.size }
+
+                // Tab 0
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (selectedTab == 0) Color(0xFF8B5CF6) else Color.Transparent)
+                        .clickable { selectedTab = 0 }
+                        .padding(vertical = 10.dp)
+                        .testTag("feedback_tab_user"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "My Sentence Review",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = if (selectedTab == 0) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+                        if (userCorrectionsCount > 0) {
+                            Badge(
+                                containerColor = if (selectedTab == 0) Color.White else Color(0xFF8B5CF6),
+                                contentColor = if (selectedTab == 0) Color(0xFF8B5CF6) else Color.White
+                            ) {
+                                Text("$userCorrectionsCount")
+                            }
+                        }
+                    }
+                }
+                
+                // Tab 1
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (selectedTab == 1) Color(0xFF8B5CF6) else Color.Transparent)
+                        .clickable { selectedTab = 1 }
+                        .padding(vertical = 10.dp)
+                        .testTag("feedback_tab_tutor"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "Tutor Explanations",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = if (selectedTab == 1) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+                        if (tutorFeedbackCount > 0) {
+                            Badge(
+                                containerColor = if (selectedTab == 1) Color.White else Color(0xFF8B5CF6),
+                                contentColor = if (selectedTab == 1) Color(0xFF8B5CF6) else Color.White
+                            ) {
+                                Text("$tutorFeedbackCount")
+                            }
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Content Area based on Selected Tab
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                if (selectedTab == 0) {
+                    // User Mistakes review list
+                    if (userMessagesWithCorrections.isEmpty()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(24.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "No mistakes",
+                                tint = Color(0xFF10B981),
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Perfect Grammar Streak!",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = textColor
+                            )
+                            Text(
+                                text = "No grammatical mistakes found in this session. Keep speaking!",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            contentPadding = PaddingValues(bottom = 24.dp)
+                        ) {
+                            items(userMessagesWithCorrections) { message ->
+                                val correctionsList = remember(message.correctionsJson) {
+                                    parseCorrections(message.correctionsJson)
+                                }
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .border(
+                                            BorderStroke(
+                                                1.dp,
+                                                if (isDark) Color(0x1F8B5CF6) else Color(0x0D8B5CF6)
+                                            ),
+                                            RoundedCornerShape(16.dp)
+                                        ),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isDark) Color(0xFF191724) else Color(0xFFF6F5FA)
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Text(
+                                            text = "Your Sentence:",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                        )
+                                        
+                                        ComparativeDiffView(
+                                            original = message.text,
+                                            corrected = message.correctedText ?: message.text,
+                                            corrections = correctionsList,
+                                            isDark = isDark
+                                        )
+                                        
+                                        if (correctionsList.isNotEmpty()) {
+                                            Text(
+                                                text = "Explanations & Rules:",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                                modifier = Modifier.padding(top = 4.dp)
+                                            )
+                                            correctionsList.forEach { correction ->
+                                                CorrectionExplanationCard(
+                                                    correction = correction,
+                                                    isDark = isDark
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Tutor Explanations Tab
+                    if (tutorMessagesWithFeedback.isEmpty()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(24.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = "No tutor explanations",
+                                tint = Color(0xFF8B5CF6),
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "No Inline Tutor Feedback Yet",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = textColor
+                            )
+                            Text(
+                                text = "When the tutor makes corrections directly inside their messages, they will appear highlighted here.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            contentPadding = PaddingValues(bottom = 24.dp)
+                        ) {
+                            items(tutorMessagesWithFeedback) { (message, correctionsList) ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .border(
+                                            BorderStroke(
+                                                1.dp,
+                                                if (isDark) Color(0x1F8B5CF6) else Color(0x0D8B5CF6)
+                                            ),
+                                            RoundedCornerShape(16.dp)
+                                        ),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isDark) Color(0xFF191724) else Color(0xFFF6F5FA)
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "Parsed from Tutor Response:",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                            )
+                                            IconButton(
+                                                onClick = { onSpeak(message.text) },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.VolumeUp,
+                                                    contentDescription = "Listen to response",
+                                                    tint = Color(0xFF8B5CF6),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+
+                                        // Highlights in tutor text block
+                                        val annotatedTutorText = remember(message.text, correctionsList) {
+                                            buildAnnotatedString {
+                                                append(message.text)
+                                                correctionsList.forEach { highlight ->
+                                                    // Highlight "original" segment in strike-through / red
+                                                    if (highlight.original.isNotEmpty()) {
+                                                        var startIndex = message.text.indexOf(highlight.original)
+                                                        while (startIndex != -1) {
+                                                            addStyle(
+                                                                style = SpanStyle(
+                                                                    color = if (isDark) Color(0xFFF87171) else Color(0xFFDC2626),
+                                                                    textDecoration = TextDecoration.LineThrough,
+                                                                    background = if (isDark) Color(0x33EF4444) else Color(0xFFFEE2E2),
+                                                                    fontWeight = FontWeight.Medium
+                                                                ),
+                                                                start = startIndex,
+                                                                end = startIndex + highlight.original.length
+                                                            )
+                                                            startIndex = message.text.indexOf(highlight.original, startIndex + highlight.original.length)
+                                                        }
+                                                    }
+                                                    // Highlight "fixed" segment in bold / green
+                                                    if (highlight.fixed.isNotEmpty()) {
+                                                        var startIndex = message.text.indexOf(highlight.fixed)
+                                                        while (startIndex != -1) {
+                                                            addStyle(
+                                                                style = SpanStyle(
+                                                                    color = if (isDark) Color(0xFF34D399) else Color(0xFF059669),
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    background = if (isDark) Color(0x3310B981) else Color(0xFFD1FAE5)
+                                                                ),
+                                                                start = startIndex,
+                                                                end = startIndex + highlight.fixed.length
+                                                            )
+                                                            startIndex = message.text.indexOf(highlight.fixed, startIndex + highlight.fixed.length)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Text(
+                                            text = annotatedTutorText,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = textColor
+                                        )
+
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        
+                                        Text(
+                                            text = "Extracted Correction Tips:",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                        )
+
+                                        correctionsList.forEach { correction ->
+                                            CorrectionExplanationCard(
+                                                correction = correction,
+                                                isDark = isDark
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun TutorThinkingIndicator() {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -3074,11 +3873,14 @@ fun HistoryScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = when (session.topic.lowercase()) {
+                                    imageVector = when (session.topic.lowercase().trim()) {
                                         "job interview", "job prep" -> Icons.Default.Work
                                         "travel" -> Icons.Default.FlightTakeoff
                                         "business" -> Icons.Default.BusinessCenter
                                         "daily life" -> Icons.Default.Home
+                                        "academic" -> Icons.Default.School
+                                        "science & tech" -> Icons.Default.Laptop
+                                        "medical & health" -> Icons.Default.Favorite
                                         else -> Icons.Default.Chat
                                     },
                                     contentDescription = "Topic",
@@ -3287,7 +4089,7 @@ fun ConversationHistoryLogViewer(
                         actions = {
                             IconButton(
                                 onClick = {
-                                    val defaultFileName = "LingoTutor_Transcript_${session.topic.replace(" ", "_")}.txt"
+                                    val defaultFileName = "AhdrAnglais_Transcript_${session.topic.replace(" ", "_")}.txt"
                                     createDocumentLauncher.launch(defaultFileName)
                                 },
                                 modifier = Modifier.testTag("log_viewer_download_button")
@@ -3466,6 +4268,9 @@ fun SettingsScreen(
                             val context = androidx.compose.ui.platform.LocalContext.current
                             val ttsRate by viewModel.ttsRate.collectAsState()
                             val ttsLocale by viewModel.ttsLocale.collectAsState()
+                            val ttsPitch by viewModel.ttsPitch.collectAsState()
+                            val ttsVoiceName by viewModel.ttsVoiceName.collectAsState()
+                            val availableVoices by viewModel.availableVoices.collectAsState()
 
                             Spacer(modifier = Modifier.height(12.dp))
                             Card(
@@ -3475,7 +4280,7 @@ fun SettingsScreen(
                                 shape = RoundedCornerShape(16.dp),
                                 border = BorderStroke(1.dp, if (isDark) Color(0x10FFFFFF) else Color(0x0D000000))
                             ) {
-                                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Text(
                                         text = "Speech Synthesis Configuration",
                                         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
@@ -3527,6 +4332,31 @@ fun SettingsScreen(
                                         }
                                     }
 
+                                    // Pitch Selection
+                                    Column {
+                                        Text(
+                                            text = "Voice Pitch: ${"%.2f".format(ttsPitch)}x",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Slider(
+                                            value = ttsPitch,
+                                            onValueChange = { viewModel.updateTtsPitch(it) },
+                                            valueRange = 0.5f..1.5f,
+                                            steps = 9,
+                                            colors = SliderDefaults.colors(
+                                                thumbColor = Color(0xFF8B5CF6),
+                                                activeTrackColor = Color(0xFF8B5CF6),
+                                                inactiveTrackColor = if (isDark) Color(0x33FFFFFF) else Color(0x1F000000)
+                                            ),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(24.dp)
+                                                .testTag("pitch_slider")
+                                        )
+                                    }
+
                                     // Accent selection
                                     Column {
                                         Text(
@@ -3567,6 +4397,102 @@ fun SettingsScreen(
                                                         ),
                                                         color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
                                                     )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Specific Voice selection dropdown
+                                    Column {
+                                        Text(
+                                            text = "Specific Tutor Voice:",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        
+                                        val friendlyVoiceLabel = { name: String ->
+                                            val lower = name.lowercase()
+                                            val type = if (lower.contains("network")) "HQ Net" else "Local"
+                                            val region = when {
+                                                lower.contains("en-us") -> "🇺🇸 US"
+                                                lower.contains("en-gb") || lower.contains("en-uk") -> "🇬🇧 UK"
+                                                lower.contains("en-au") -> "🇦🇺 AU"
+                                                lower.contains("en-in") -> "🇮🇳 IN"
+                                                lower.contains("en-ca") -> "🇨🇦 CA"
+                                                else -> "🌐 EN"
+                                            }
+                                            val code = name.substringAfterLast("-", "Voice")
+                                            "$region $code ($type)"
+                                        }
+
+                                        if (availableVoices.isEmpty()) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(if (isDark) Color(0x0DFFFFFF) else Color(0x05000000))
+                                                    .padding(10.dp),
+                                                contentAlignment = Alignment.CenterStart
+                                            ) {
+                                                Text(
+                                                    text = "Default System Voice",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                                )
+                                            }
+                                        } else {
+                                            var expanded by remember { mutableStateOf(false) }
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(if (isDark) Color(0x1AFFFFFF) else Color(0x0F000000))
+                                                    .clickable { expanded = true }
+                                                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    val displayName = ttsVoiceName?.let { friendlyVoiceLabel(it) } ?: "Default System Voice"
+                                                    Text(
+                                                        text = displayName,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                    Icon(
+                                                        imageVector = Icons.Default.ArrowDropDown,
+                                                        contentDescription = "Select specific voice",
+                                                        tint = Color(0xFF8B5CF6)
+                                                    )
+                                                }
+                                                
+                                                DropdownMenu(
+                                                    expanded = expanded,
+                                                    onDismissRequest = { expanded = false },
+                                                    modifier = Modifier
+                                                        .fillMaxWidth(0.8f)
+                                                        .background(MaterialTheme.colorScheme.surface)
+                                                ) {
+                                                    DropdownMenuItem(
+                                                        text = { Text("Default System Voice", style = MaterialTheme.typography.bodySmall) },
+                                                        onClick = {
+                                                            viewModel.updateTtsVoiceName(null)
+                                                            expanded = false
+                                                        }
+                                                    )
+                                                    availableVoices.forEach { voice ->
+                                                        val cleanLabel = friendlyVoiceLabel(voice)
+                                                        DropdownMenuItem(
+                                                            text = { Text(cleanLabel, style = MaterialTheme.typography.bodySmall) },
+                                                            onClick = {
+                                                                viewModel.updateTtsVoiceName(voice)
+                                                                expanded = false
+                                                            }
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }

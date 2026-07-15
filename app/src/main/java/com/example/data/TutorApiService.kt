@@ -93,30 +93,110 @@ class TutorApiService(private val prefs: PreferencesHelper) {
             return
         }
 
-        // System prompt for English Tutor
+        val themeVocabularyGuidance = when (topic.lowercase().trim()) {
+            "business" -> """
+                - THEME: Business / Professional.
+                - VOCABULARY FOCUS: Use clear business, corporate, and professional terminology.
+                - TAILORED WORDS TO INTEGRATE: Try to use terms like 'synergy', 'leverage', 'KPIs', 'stakeholders', 'deliverables', 'strategic alignment', 'ROI', 'bandwidth', 'market penetration', 'milestones'.
+                - INSTRUCTION: Encourage professional phrasing and explain or suggest alternative corporate idioms where appropriate.
+            """.trimIndent()
+            "travel" -> """
+                - THEME: Travel & Tourism.
+                - VOCABULARY FOCUS: Focus on vocabulary for transportation, lodging, culinary experiences, asking directions, and sightseeing.
+                - TAILORED WORDS TO INTEGRATE: Try to use terms like 'itinerary', 'layover', 'boarding pass', 'concierge', 'local landmarks', 'breathtaking views', 'sightseeing', 'reservation', 'cultural immersion', 'local delicacies'.
+                - INSTRUCTION: Use common travel idioms and help the user learn survival phrases for international trips.
+            """.trimIndent()
+            "daily life" -> """
+                - THEME: Daily Life / Hobbies / Routines.
+                - VOCABULARY FOCUS: Focus on casual, natural everyday vocabulary and expressions.
+                - TAILORED WORDS TO INTEGRATE: Try to use terms like 'routine', 'pastime', 'unwind', 'chores', 'errands', 'socializing', 'hustle and bustle', 'couch potato', 'catch up', 'on the go'.
+                - INSTRUCTION: Keep the tone highly conversational, friendly, and warm. Use common domestic and social idioms.
+            """.trimIndent()
+            "job interview" -> """
+                - THEME: Job Interview Prep.
+                - VOCABULARY FOCUS: Use terms related to competencies, skills, career history, performance assessment, and workplace achievements.
+                - TAILORED WORDS TO INTEGRATE: Try to use terms like 'strengths', 'areas of growth', 'accomplishments', 'collaboration', 'problem-solving', 'leadership', 'initiative', 'resume', 'track record', 'career goals'.
+                - INSTRUCTION: Adopt the persona of a professional, friendly hiring manager or interviewer. Keep the questions focused on evaluating skills.
+            """.trimIndent()
+            "academic" -> """
+                - THEME: Academic & Formal Discussion.
+                - VOCABULARY FOCUS: Use structured, logical, and formal vocabulary suitable for academic, scientific, or literary discourse.
+                - TAILORED WORDS TO INTEGRATE: Try to use terms like 'empirical', 'hypothesis', 'methodology', 'discourse', 'paradigms', 'implication', 'correlate', 'synthesize', 'perspective', 'critical analysis'.
+                - INSTRUCTION: Encourage deep intellectual reflection, structured argumentation, and precise vocabulary usage.
+            """.trimIndent()
+            "science & tech", "science", "technology" -> """
+                - THEME: Science & Technology.
+                - VOCABULARY FOCUS: Use terms related to digital technology, scientific research, engineering, and innovation.
+                - TAILORED WORDS TO INTEGRATE: Try to use terms like 'innovation', 'cutting-edge', 'algorithm', 'paradigm shift', 'automation', 'disruptive tech', 'quantum leap', 'framework', 'optimization', 'scalability'.
+                - INSTRUCTION: Talk about technological trends, gadgets, AI, software, or scientific achievements with accurate terminology.
+            """.trimIndent()
+            "medical & health", "medical", "health" -> """
+                - THEME: Medical & Health.
+                - VOCABULARY FOCUS: Use terms related to healthcare, healthy lifestyle, biology, fitness, and medical topics.
+                - TAILORED WORDS TO INTEGRATE: Try to use terms like 'well-being', 'diagnosis', 'preventative care', 'cardiovascular', 'nutrition', 'immunization', 'holistic health', 'symptom', 'chronic', 'resilience'.
+                - INSTRUCTION: Talk about wellness, health habits, physical fitness, or basic medical concepts using clear, accurate vocabulary.
+            """.trimIndent()
+            else -> """
+                - THEME: Casual General Conversation.
+                - VOCABULARY FOCUS: Focus on diverse, natural, and helpful vocabulary.
+                - INSTRUCTION: Help the user practice natural flow, gentle expression of opinions, and broaden their vocabulary base.
+            """.trimIndent()
+        }
+
+        // System prompt for AhdrAnglais
         val systemPrompt = """
             You are a friendly, patient English tutor. 
             You help the user practice English conversation.
             Topic for this session: $topic.
             User's English Level: $level.
             
+            Theme-Specific Vocabulary Guidance:
+            $themeVocabularyGuidance
+            
             Guidelines:
+            - If the user shifts the topic, introduces a new subject, or asks to talk about something specific, follow their lead immediately and adapt the conversation to their requested subject. Do not stick rigidly to the initial topic if they want to talk about something else.
             - Adapt your vocabulary and sentence complexity to the user's level ($level).
               * beginner: Use simple vocabulary, short sentences, and highly clear syntax.
               * intermediate: Use moderate vocabulary, clear grammar, and some useful idioms.
               * advanced: Speak like a native, using rich vocabulary, idioms, and natural flow.
             - Correct the user's mistakes gently if you spot any, explain why, and keep the conversation flowing.
-            - Always ask a friendly, open-ended follow-up question at the end to prompt the user to reply.
-            - Keep your responses concise (2 to 4 sentences) so the user doesn't get overwhelmed.
+            - CRITICAL: You MUST ALWAYS end your response with a highly relevant, natural, open-ended follow-up question. This question must connect directly to what the user said, match their English proficiency level ($level), and keep the conversation active and engaging. Never leave the user without a clear, inviting prompt to answer!
+            - Keep your responses concise (2 to 4 sentences) so the user doesn't get overwhelmed, but ensure the final sentence is always that high-quality, open-ended follow-up question.
         """.trimIndent()
 
-        // Build history in Gemini format
+        // Build history in Gemini format (ensuring sequence starts with 'user' and alternates strictly)
         val geminiContents = mutableListOf<JSONObject>()
+        var currentRole: String? = null
+        var currentText = StringBuilder()
+
         messages.forEach { msg ->
             val role = if (msg.sender == "user") "user" else "model"
+            if (role == "model" && currentRole == null) {
+                // Skip initial model message if it's the very first in history to comply with Gemini API spec
+                return@forEach
+            }
+            if (role == currentRole) {
+                // Merge consecutive messages of the same role
+                if (currentText.isNotEmpty()) {
+                    currentText.append("\n")
+                }
+                currentText.append(msg.text)
+            } else {
+                if (currentRole != null) {
+                    geminiContents.add(
+                        JSONObject().put("role", currentRole).put(
+                            "parts", JSONArray().put(JSONObject().put("text", currentText.toString()))
+                        )
+                    )
+                }
+                currentRole = role
+                currentText = StringBuilder(msg.text)
+            }
+        }
+        if (currentRole != null && currentText.isNotEmpty()) {
             geminiContents.add(
-                JSONObject().put("role", role).put(
-                    "parts", JSONArray().put(JSONObject().put("text", msg.text))
+                JSONObject().put("role", currentRole).put(
+                    "parts", JSONArray().put(JSONObject().put("text", currentText.toString()))
                 )
             )
         }
@@ -261,24 +341,42 @@ class TutorApiService(private val prefs: PreferencesHelper) {
             Analyze the following English sentence for grammar, spelling, vocabulary, or phrasing mistakes:
             "$text"
             
-            Return a JSON object matching this exact structure:
-            {
-              "corrected": "the fully corrected sentence, or identical to original if there are absolutely no mistakes",
-              "explanations": [
-                {
-                  "original": "the exact segment that was wrong",
-                  "fixed": "the corrected segment",
-                  "reason": "short explanation of why it was wrong and how to fix it"
-                }
-              ]
-            }
-            If the input sentence is perfectly correct, explanations should be empty and corrected should match the input exactly. Do not output anything else than JSON.
+            Return a JSON object with:
+            1. "corrected": the fully corrected sentence (or identical to original if correct).
+            2. "corrections": an array of items, each with:
+               - "original": the exact part that is wrong/suboptimal.
+               - "fixed": the corrected part.
+               - "reason": a clear, helpful explanation of why it is incorrect or how it can be improved.
+            
+            If there are absolutely no mistakes, the corrections array must be empty and corrected must match the input exactly.
         """.trimIndent()
+
+        val responseSchemaJson = JSONObject().apply {
+            put("type", "OBJECT")
+            put("properties", JSONObject().apply {
+                put("corrected", JSONObject().put("type", "STRING").put("description", "The fully corrected sentence, or identical to original if perfectly correct."))
+                put("corrections", JSONObject().apply {
+                    put("type", "ARRAY")
+                    put("description", "List of grammatical, spelling, or vocabulary corrections.")
+                    put("items", JSONObject().apply {
+                        put("type", "OBJECT")
+                        put("properties", JSONObject().apply {
+                            put("original", JSONObject().put("type", "STRING").put("description", "The wrong or suboptimal text segment."))
+                            put("fixed", JSONObject().put("type", "STRING").put("description", "The corrected version of that text segment."))
+                            put("reason", JSONObject().put("type", "STRING").put("description", "The explanation for this correction."))
+                        })
+                        put("required", JSONArray().put("original").put("fixed").put("reason"))
+                    })
+                })
+            })
+            put("required", JSONArray().put("corrected").put("corrections"))
+        }
 
         val requestJson = JSONObject().apply {
             put("contents", JSONArray().put(JSONObject().put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
             put("generationConfig", JSONObject().apply {
                 put("responseMimeType", "application/json")
+                put("responseSchema", responseSchemaJson)
             })
         }
 
@@ -527,7 +625,37 @@ class TutorApiService(private val prefs: PreferencesHelper) {
         val topicLower = topic.lowercase().trim()
         val isFreeTalk = topicLower == "free talk"
 
+        // Try to dynamically detect if the user wants to talk about a specific custom topic
+        var dynamicTopic: String? = null
+        val talkPatterns = listOf(
+            Regex("\\btalk\\s+about\\s+([a-zA-Z0-9\\s]{3,25})"),
+            Regex("\\bdiscuss\\s+([a-zA-Z0-9\\s]{3,25})"),
+            Regex("\\bchat\\s+about\\s+([a-zA-Z0-9\\s]{3,25})"),
+            Regex("\\bspeak\\s+about\\s+([a-zA-Z0-9\\s]{3,25})"),
+            Regex("\\btalking\\s+about\\s+([a-zA-Z0-9\\s]{3,25})"),
+            Regex("\\binterest\\s+in\\s+([a-zA-Z0-9\\s]{3,25})"),
+            Regex("\\binterested\\s+in\\s+([a-zA-Z0-9\\s]{3,25})"),
+            Regex("\\blike\\s+to\\s+talk\\s+about\\s+([a-zA-Z0-9\\s]{3,25})"),
+            Regex("\\babout\\s+([a-zA-Z0-9\\s]{3,25})")
+        )
+
+        if (isFreeTalk) {
+            for (pattern in talkPatterns) {
+                val match = pattern.find(lastUserMessage)
+                if (match != null) {
+                    val candidate = match.groupValues.lastOrNull()?.trim()
+                    if (!candidate.isNullOrEmpty() && candidate.split(" ").size <= 4) {
+                        dynamicTopic = candidate
+                        break
+                    }
+                }
+            }
+        }
+
         val responseText = when {
+            dynamicTopic != null -> {
+                "Oh, **$dynamicTopic** is a fantastic topic to talk about! What specific aspect of $dynamicTopic interests you the most, or do you have a favorite memory/story related to it?"
+            }
             isGreeting -> {
                 if (isFreeTalk) {
                     "Hello there! It is wonderful to talk with you. How has your day been so far, or is there any specific topic you'd like to chat about today?"
@@ -589,13 +717,16 @@ class TutorApiService(private val prefs: PreferencesHelper) {
             }
             else -> {
                 if (isFreeTalk) {
-                    val weatherKeywords = listOf("weather", "rain", "sunny", "hot", "cold", "snow", "degrees", "summer", "winter", "cloudy", "forecast")
-                    val familyKeywords = listOf("family", "friend", "friends", "parents", "brother", "sister", "wife", "husband", "children", "kid", "son", "daughter")
-                    val mediaKeywords = listOf("music", "song", "band", "movie", "film", "book", "read", "novel", "art", "painting", "actor", "watch", "singer")
-                    val foodKeywords = listOf("food", "cooking", "eat", "restaurant", "recipe", "pizza", "burger", "cuisine", "chef", "dinner", "lunch")
-                    val techKeywords = listOf("tech", "computer", "ai", "coding", "programming", "software", "gpt", "gemini", "phone", "internet")
-                    val sportKeywords = listOf("sport", "football", "soccer", "basketball", "gym", "run", "workout", "tennis", "game", "team")
-                    val travelKeywords = listOf("travel", "trip", "vacation", "country", "europe", "asia", "america", "flight", "visit", "explore", "holiday")
+                    val weatherKeywords = listOf("weather", "forecast", "rain", "raining", "sunny", "sun", "hot", "cold", "snow", "snowing", "wind", "windy", "degree", "degrees", "temperature", "cloud", "cloudy", "summer", "winter", "spring", "autumn")
+                    val familyKeywords = listOf("family", "parents", "father", "dad", "mother", "mom", "brother", "sister", "siblings", "son", "daughter", "children", "kids", "wife", "husband", "cousin", "aunt", "uncle", "grandmother", "grandfather", "friends", "friend", "best friend", "roommate")
+                    val mediaKeywords = listOf("music", "song", "songs", "singer", "band", "concert", "album", "movie", "movies", "film", "films", "cinema", "show", "shows", "series", "netflix", "watch", "watching", "book", "books", "novel", "author", "reading", "read", "art", "painting", "museum", "hobby", "hobbies")
+                    val foodKeywords = listOf("food", "meal", "meals", "eat", "eating", "drink", "drinking", "breakfast", "lunch", "dinner", "supper", "snack", "restaurant", "cafe", "chef", "cooking", "cook", "recipe", "recipes", "pizza", "burger", "pasta", "salad", "delicious", "tasty", "dessert")
+                    val techKeywords = listOf("tech", "technology", "computer", "computers", "software", "hardware", "programming", "programmer", "coding", "coder", "app", "apps", "application", "developer", "design", "internet", "website", "phone", "smartphone", "ai", "artificial intelligence", "gemini", "chatgpt", "prompt")
+                    val sportKeywords = listOf("world cup", "worldcup", "cup", "championship", "fifa", "match", "game", "soccer", "football", "sport", "sports", "basketball", "tennis", "cricket", "olympics", "gym", "workout", "fitness", "run", "running", "jogging", "exercise", "player", "athlete", "team", "stadium")
+                    val travelKeywords = listOf("travel", "traveling", "trip", "trips", "vacation", "holiday", "holidays", "flight", "ticket", "hotel", "airport", "country", "countries", "city", "cities", "explore", "map", "museum", "sightseeing", "tourist", "guide")
+                    val petKeywords = listOf("pet", "pets", "dog", "dogs", "cat", "cats", "puppy", "kitten", "puppies", "kittens", "animal", "animals", "bird", "fish", "hamster", "rabbit", "lion", "tiger", "bear")
+                    val workKeywords = listOf("job", "work", "career", "office", "profession", "business", "company", "boss", "colleague", "colleagues", "manager", "meeting", "interview", "hired", "resume", "salary")
+                    val studyKeywords = listOf("school", "college", "university", "class", "course", "degree", "learn", "learning", "student", "major", "exam", "test", "teacher", "professor", "homework", "education")
 
                     when {
                         weatherKeywords.any { lastUserMessage.contains(it) } -> {
@@ -611,22 +742,31 @@ class TutorApiService(private val prefs: PreferencesHelper) {
                             "That sounds delicious! I love exploring different cuisines. Do you prefer cooking at home with recipes, or do you enjoy finding new local restaurants to try?"
                         }
                         techKeywords.any { lastUserMessage.contains(it) } -> {
-                            "Technology is evolving so rapidly, and software/AI development is at the absolute heart of it! Are you working on any personal tech projects or learning new digital skills recently?"
+                            "Technology is evolving so rapidly, and software development/AI is at the absolute heart of it! Are you working on any personal tech projects or learning new digital skills recently?"
                         }
                         sportKeywords.any { lastUserMessage.contains(it) } -> {
-                            "Staying active is fantastic for both physical and mental well-being! Do you play competitively or follow a specific sport, or do you do it purely for recreation and health?"
+                            "Staying active and following major sports events is so thrilling! Do you play actively, or is there a particular team, athlete, or tournament (like the World Cup!) that you follow closely?"
                         }
                         travelKeywords.any { lastUserMessage.contains(it) } -> {
                             "Exploring new places and experiencing different cultures is one of life's greatest joys! If you could travel anywhere in the world right now with no budget, where would you go?"
                         }
+                        petKeywords.any { lastUserMessage.contains(it) } -> {
+                            "Animals and pets bring so much warmth and happiness to our lives! Do you have any pets of your own, or is there an animal that you've always found particularly fascinating?"
+                        }
+                        workKeywords.any { lastUserMessage.contains(it) } -> {
+                            "Finding balance and maintaining a fulfilling career is such an important part of our daily lives. What kind of work do you do, or what would be your absolute dream job?"
+                        }
+                        studyKeywords.any { lastUserMessage.contains(it) } -> {
+                            "Continuous learning is incredibly rewarding! What subject or skill are you currently focused on studying, and how do you like to keep yourself motivated?"
+                        }
                         else -> {
                             when (userMessageCount) {
                                 0 -> "Hello! Welcome to our Free Talk session. We can discuss anything you'd like today. How has your day been so far, or is there a specific topic you want to chat about?"
-                                1 -> "That sounds really interesting! Can you tell me a bit more about that, or what made you think about it?"
-                                2 -> "I completely agree with you. In your opinion, what's the most important aspect or element of that?"
-                                3 -> "Interesting! Many people feel exactly the same way. By the way, what do you usually like to do in your free time when you want to relax?"
-                                4 -> "That's wonderful! What got you interested in that originally, and how often do you get to do it?"
-                                else -> "That is super fascinating. I'm really enjoying our conversation! What other aspects would you like to explore together?"
+                                1 -> "That sounds really interesting! What got you interested in that, or could you share a bit more about your thoughts on it?"
+                                2 -> "I see! That's a very interesting perspective. In your experience, what do you think is the most exciting or important aspect of that?"
+                                3 -> "That makes a lot of sense, and it's really interesting to hear your thoughts. By the way, is this something you enjoy discussing or doing in your daily life as well?"
+                                4 -> "That's awesome! It's great to hear more about your thoughts. What originally got you interested in this area?"
+                                else -> "I am really enjoying our conversation! You are doing a fantastic job expressing your thoughts in English. What other areas would you like us to explore together?"
                             }
                         }
                     }
