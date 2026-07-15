@@ -1,366 +1,136 @@
-# 🏡 EstateFlow AI
+# English Tutor App
 
-**AI-Powered Real Estate Management Platform**
+A free, unlimited English conversation practice app. Chat by text or voice with an AI tutor that corrects your mistakes and keeps the conversation going — powered by a self-hosted open-source LLM (Ollama), so there's no per-token billing and no artificial daily usage cap.
 
-EstateFlow AI is a modern real estate management application designed for agencies, brokers, and property owners. It simplifies property management, client interactions, and sales workflows while integrating Artificial Intelligence to improve productivity and decision-making.
+## Why self-hosted instead of a paid API?
 
----
+Most AI language-learning apps rely on OpenAI/Gemini/Claude APIs, which means either a paywall or a daily token quota. This project runs its own LLM (via [Ollama](https://ollama.com)) on a personal VPS — free to use as much as you want, limited only by the server's own hardware, not by billing.
 
-# ✨ Features
-
-## 🏠 Property Management
-
-* Create, edit, and delete property listings
-* Upload multiple property images
-* Organize properties by:
-
-  * Apartment
-  * Villa
-  * House
-  * Land
-  * Commercial Property
-* Property status
-
-  * For Sale
-  * For Rent
-  * Sold
-* Advanced property search
-* Property filtering
-* Favorite properties
-
----
-
-## 👤 User Authentication
-
-* Secure Login
-* User Registration
-* Password Encryption
-* Profile Management
-* Role-Based Access Control
-
-Roles include:
-
-* Administrator
-* Real Estate Agent
-* Property Owner
-* Customer
-
----
-
-## 🤖 AI Features
-
-EstateFlow AI integrates Artificial Intelligence to assist users.
-
-### AI Property Assistant
-
-The AI assistant can help users:
-
-* Search for suitable properties
-* Recommend homes based on preferences
-* Answer property-related questions
-* Explain mortgage basics
-* Suggest investment opportunities
-* Compare different listings
-
----
-
-## 📊 Dashboard
-
-Interactive dashboard with:
-
-* Total Properties
-* Active Listings
-* Sold Properties
-* Rental Properties
-* Revenue Statistics
-* Client Statistics
-* Agent Performance
-
----
-
-## 🔍 Smart Search
-
-Search properties using:
-
-* Location
-* City
-* Price Range
-* Number of Bedrooms
-* Number of Bathrooms
-* Property Type
-* Property Status
-
----
-
-## ❤️ Favorites
-
-Users can:
-
-* Save favorite properties
-* Remove favorites
-* Access saved listings anytime
-
----
-
-## 📅 Appointment Scheduling
-
-Schedule visits between agents and customers.
-
-Features include:
-
-* Select date
-* Select time
-* Meeting reminders
-* Appointment history
-
----
-
-## 💬 Messaging
-
-Communication between:
-
-* Customers
-* Agents
-* Property Owners
-
-Includes:
-
-* Direct messaging
-* Notifications
-* Inquiry management
-
----
-
-## 📈 Analytics
-
-Generate insights such as:
-
-* Most viewed properties
-* Best-selling locations
-* Sales trends
-* Revenue reports
-* Customer growth
-
----
-
-## 🔔 Notifications
-
-Receive notifications for:
-
-* New inquiries
-* Property updates
-* Appointment reminders
-* Sales confirmations
-
----
-
-# 🛠 Technology Stack
-
-## Frontend
-
-* React
-* Next.js
-* TypeScript
-* Tailwind CSS
-
-## Backend
-
-* Next.js API Routes
-* REST API
-
-## Database
-
-* PostgreSQL
-
-## ORM
-
-* Prisma
-
-## Authentication
-
-* JWT / NextAuth
-
-## AI
-
-* Google Gemini API
-
-## Storage
-
-* Cloud Storage for images
-
----
-
-# 📂 Project Structure
+## Architecture
 
 ```
-EstateFlow-AI/
-│
-├── app/
-├── components/
-├── lib/
-├── prisma/
-├── public/
-├── styles/
-├── hooks/
-├── services/
-├── types/
-├── utils/
-├── middleware.ts
-├── package.json
-└── README.md
+Flutter App (iOS/Android)
+    │  HTTPS + SSE streaming
+    ▼
+FastAPI Backend (VPS)
+    │  local HTTP calls
+    ▼
+Ollama (same VPS, self-hosted LLM)
 ```
 
----
+## Features
 
-# 🚀 Installation
+- **Text & voice chat** — speak or type, the AI responds in kind (speech-to-text input, text-to-speech playback)
+- **Adjustable difficulty** — Beginner / Intermediate / Advanced
+- **Topic modes** — Free talk, Job interview, Travel, Daily life, Business
+- **Grammar correction** — inline correction chips with explanations, without breaking conversation flow
+- **Local history** — all conversations saved on-device, no account required
+- **Streaming responses** — AI replies appear live, token by token
 
-Clone the repository:
+## Tech Stack
+
+| Layer | Tech |
+|---|---|
+| Mobile app | Flutter (iOS + Android) |
+| State management | Provider / Riverpod |
+| Voice input | `speech_to_text` |
+| Voice output | `flutter_tts` |
+| Local storage | `sqflite` |
+| Secure storage | `flutter_secure_storage` |
+| Backend | Python, FastAPI |
+| LLM | Ollama (`llama3.1:8b` or `llama3.2:3b`) |
+| Deployment | Docker Compose on a VPS (Hetzner/OVH) |
+
+## Project Structure
+
+```
+english-tutor-app/
+├── backend/
+│   ├── main.py              # FastAPI app: /chat, /correct, /health
+│   ├── requirements.txt
+│   ├── docker-compose.yml   # Ollama + FastAPI together
+│   └── README.md            # backend-specific setup
+├── mobile/
+│   ├── lib/
+│   │   ├── screens/         # Home, Chat, History, Settings
+│   │   ├── services/        # API client, TTS/STT wrappers, local DB
+│   │   ├── models/
+│   │   └── main.dart
+│   └── pubspec.yaml
+└── README.md                 # this file
+```
+
+## Setup
+
+### 1. Backend + Ollama (local dev)
 
 ```bash
-git clone https://github.com/yourusername/estateflow-ai.git
+ollama pull llama3.1:8b
+ollama list          # confirm it's installed
 ```
 
-Go into the project:
+Test Ollama directly:
+```bash
+curl http://localhost:11434/api/generate -d '{
+  "model": "llama3.1:8b",
+  "prompt": "Say hello in English",
+  "stream": false
+}'
+```
+
+Run the backend:
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
+
+Set environment variables before running:
+```bash
+export API_KEY=your-secret-key
+export OLLAMA_MODEL=llama3.1:8b
+```
+
+### 2. Mobile app
 
 ```bash
-cd estateflow-ai
+cd mobile
+flutter pub get
+flutter run
 ```
 
-Install dependencies:
+In the app's **Settings** screen, set the backend URL:
+- Testing on the same PC's emulator: `http://10.0.2.2:8000` (Android emulator) or `http://localhost:8000` (iOS simulator)
+- Testing on a physical phone (same wifi): your PC's LAN IP, e.g. `http://192.168.1.42:8000` (find it with `ipconfig` on Windows)
+- Production: your VPS's domain/IP
+
+And the API key matching `API_KEY` from the backend `.env`.
+
+### 3. Production deployment (VPS)
 
 ```bash
-npm install
+cd backend
+docker-compose up -d
 ```
 
-Create the environment file:
+This starts Ollama and the FastAPI backend together. Make sure to:
+- Pull the model inside the container on first run (`docker exec -it <ollama_container> ollama pull llama3.1:8b`)
+- Set a strong `API_KEY`
+- Put a reverse proxy (Caddy/Nginx) with HTTPS in front of the FastAPI backend before exposing it publicly
 
-```bash
-cp .env.example .env
-```
+## Roadmap / Ideas
 
-Configure your environment variables:
+- [ ] Pronunciation scoring
+- [ ] Daily streak / practice reminders (optional, kept non-gamified)
+- [ ] Export conversation history
+- [ ] Multi-language support beyond English
 
-```env
-DATABASE_URL=
-NEXTAUTH_SECRET=
-NEXTAUTH_URL=
-GEMINI_API_KEY=
-```
+## License
 
-Run database migrations:
+Personal/portfolio project.
 
-```bash
-npx prisma migrate dev
-```
-
-Generate Prisma Client:
-
-```bash
-npx prisma generate
-```
-
-Run the application:
-
-```bash
-npm run dev
-```
-
-Open:
-
-```
-http://localhost:3000
-```
-
----
-
-# 📸 Screens
-
-* Login
-* Register
-* Dashboard
-* Properties
-* Property Details
-* AI Assistant
-* Favorites
-* Appointments
-* Messages
-* Analytics
-* Profile
-
----
-
-# 🔒 Security
-
-* JWT Authentication
-* Password Hashing
-* Protected Routes
-* Role-Based Authorization
-* Input Validation
-* SQL Injection Protection
-* XSS Protection
-* CSRF Protection
-
----
-
-# 🎯 Future Improvements
-
-* Mobile Application (Flutter / React Native)
-* AI Property Price Prediction
-* AI Market Analysis
-* Virtual Property Tours
-* Mortgage Calculator
-* Digital Contract Signing
-* Multi-language Support
-* Payment Integration
-* Email Notifications
-* SMS Notifications
-* Interactive Maps
-* AI Voice Assistant
-
----
-
-# 🤝 Contributing
-
-Contributions are welcome.
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push your branch
-5. Open a Pull Request
-
----
-
-# 📄 License
-
-This project is licensed under the MIT License.
-
----
-
-# 👨‍💻 Author
-
-Developed by **Mehdi Koceir**
-
-**Computer Systems & Networks (SIR) Student**
-
-Specializing in:
-
-* AI Applications
-* Full-Stack Web Development
-* Mobile Development
-* AI Workflow Automation
-* Real Estate Technology
-
----
-
-## ⭐ If you like this project, consider giving it a star on GitHub!
-
-
-<img width="2176" height="1632" alt="image" src="https://github.com/user-attachments/assets/37476fed-70d3-40bb-b2e2-8fe168ebf2b5" />
-<img width="2176" height="1632" alt="image" src="https://github.com/user-attachments/assets/362dd0f9-2044-4b04-adcf-e6eb5a23de55" />
-<img width="2176" height="1632" alt="image" src="https://github.com/user-attachments/assets/6ae837d4-874e-4ea2-a0fd-09dfb6c196d9" />
-<img width="2176" height="1632" alt="image" src="https://github.com/user-attachments/assets/6fc1fc30-ec32-44d9-9b0d-9a3c8fd73027" />
-
-
-
-
+<img width="1440" height="2560" alt="image" src="https://github.com/user-attachments/assets/4df63612-9362-48ec-82b5-aee9c95de317" />
+<img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/cc24529c-1f50-4e0c-bd3f-73b1977073ea" />
+<img width="2176" height="1632" alt="image" src="https://github.com/user-attachments/assets/07f69964-b4ee-4652-9b28-a290b03a1bad" />
+<img width="2176" height="1632" alt="image" src="https://github.com/user-attachments/assets/b328e209-5731-432d-b143-cf5c997d8807" />
+<img width="2176" height="1632" alt="image" src="https://github.com/user-attachments/assets/65321f6a-1581-4427-be47-eef4694aaf36" />
