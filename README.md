@@ -1,196 +1,366 @@
-# 📱 AhdrAnglais (أهدر Anglais)
+# 🏡 EstateFlow AI
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Platform Android" />
-  <img src="https://img.shields.io/badge/Kotlin-1.9.0-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin Version" />
-  <img src="https://img.shields.io/badge/Jetpack_Compose-M3-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white" alt="Jetpack Compose" />
-  <img src="https://img.shields.io/badge/Database-Room_SQLite-005C84?style=for-the-badge&logo=sqlite&logoColor=white" alt="Room DB" />
-</p>
+**AI-Powered Real Estate Management Platform**
 
-**AhdrAnglais** (Algerian-slang/Arabic word for *"Speak"* English) is a premium, offline-first, AI-driven language practice application designed for Android. It enables language learners to naturally practice English conversation with an intelligent virtual tutor, providing real-time audio transcriptions, detailed feedback, and dynamic progress metrics.
+EstateFlow AI is a modern real estate management application designed for agencies, brokers, and property owners. It simplifies property management, client interactions, and sales workflows while integrating Artificial Intelligence to improve productivity and decision-making.
 
 ---
 
-## ✨ Features
+# ✨ Features
 
-- 🎙️ **Real-Time Voice-To-Text Practice:** Uses advanced Android speech recognition capabilities (STT) for fluid speaking practice.
-- 🗣️ **Premium Text-To-Speech (TTS):** Highly customizable tutor voices featuring natural US, UK, CA, AU, or IN accent adjustments.
-- 🧠 **AI-Powered Feedback:** Instantly analyzes user input, correcting grammar, vocabulary, spelling, and phrasing errors.
-- 📂 **Session History & Outlines:** Persistent record of past conversations categorized by topics like *Free Talk, Job Interview, Travel, Daily Life,* or *Business*.
-- 📊 **Progress Analytics & Charts:** Custom progress visualization reflecting vocabulary expansion and grammatical accuracy over time.
-- 📚 **Personalized Word Banks:** Automatically extracts newly discovered words into a custom vocabulary explorer where they can be marked as learned.
-- 🔥 **Daily Streak Tracker:** Motivating streaks to ensure learners maintain consistency and discipline.
+## 🏠 Property Management
+
+* Create, edit, and delete property listings
+* Upload multiple property images
+* Organize properties by:
+
+  * Apartment
+  * Villa
+  * House
+  * Land
+  * Commercial Property
+* Property status
+
+  * For Sale
+  * For Rent
+  * Sold
+* Advanced property search
+* Property filtering
+* Favorite properties
 
 ---
 
-## 📸 Screenshots & Visual Demonstrations
+## 👤 User Authentication
 
-> *Below are conceptual layout placeholders of the premium Material 3 Dark/Light user interface.*
+* Secure Login
+* User Registration
+* Password Encryption
+* Profile Management
+* Role-Based Access Control
 
-| 🚀 Explore Dashboard | 💬 Conversational Tutor | 📊 Progress & Analytics |
-|:---:|:---:|:---:|
-| <img src="https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80" width="240" alt="Dashboard" /> | <img src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=400&q=80" width="240" alt="Chat Workspace" /> | <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=400&q=80" width="240" alt="Charts screen" /> |
+Roles include:
+
+* Administrator
+* Real Estate Agent
+* Property Owner
+* Customer
 
 ---
 
-## 🏗️ Architecture & Flow
+## 🤖 AI Features
 
-The application is structured following the official Android guidelines using the **MVVM (Model-View-ViewModel)** architectural pattern.
+EstateFlow AI integrates Artificial Intelligence to assist users.
+
+### AI Property Assistant
+
+The AI assistant can help users:
+
+* Search for suitable properties
+* Recommend homes based on preferences
+* Answer property-related questions
+* Explain mortgage basics
+* Suggest investment opportunities
+* Compare different listings
+
+---
+
+## 📊 Dashboard
+
+Interactive dashboard with:
+
+* Total Properties
+* Active Listings
+* Sold Properties
+* Rental Properties
+* Revenue Statistics
+* Client Statistics
+* Agent Performance
+
+---
+
+## 🔍 Smart Search
+
+Search properties using:
+
+* Location
+* City
+* Price Range
+* Number of Bedrooms
+* Number of Bathrooms
+* Property Type
+* Property Status
+
+---
+
+## ❤️ Favorites
+
+Users can:
+
+* Save favorite properties
+* Remove favorites
+* Access saved listings anytime
+
+---
+
+## 📅 Appointment Scheduling
+
+Schedule visits between agents and customers.
+
+Features include:
+
+* Select date
+* Select time
+* Meeting reminders
+* Appointment history
+
+---
+
+## 💬 Messaging
+
+Communication between:
+
+* Customers
+* Agents
+* Property Owners
+
+Includes:
+
+* Direct messaging
+* Notifications
+* Inquiry management
+
+---
+
+## 📈 Analytics
+
+Generate insights such as:
+
+* Most viewed properties
+* Best-selling locations
+* Sales trends
+* Revenue reports
+* Customer growth
+
+---
+
+## 🔔 Notifications
+
+Receive notifications for:
+
+* New inquiries
+* Property updates
+* Appointment reminders
+* Sales confirmations
+
+---
+
+# 🛠 Technology Stack
+
+## Frontend
+
+* React
+* Next.js
+* TypeScript
+* Tailwind CSS
+
+## Backend
+
+* Next.js API Routes
+* REST API
+
+## Database
+
+* PostgreSQL
+
+## ORM
+
+* Prisma
+
+## Authentication
+
+* JWT / NextAuth
+
+## AI
+
+* Google Gemini API
+
+## Storage
+
+* Cloud Storage for images
+
+---
+
+# 📂 Project Structure
 
 ```
-       ┌────────────────────────────────────────────────────────┐
-       │                       UI Layer                         │
-       │  [MainActivity] <─> [Screens.kt (Jetpack Compose M3)]  │
-       └───────────────────────────┬────────────────────────────┘
-                                   │
-                                   ▼
-       ┌────────────────────────────────────────────────────────┐
-       │                    ViewModel Layer                     │
-       │                   [TutorViewModel]                     │
-       └───────────────────────────┬────────────────────────────┘
-                                   │
-                    ┌──────────────┴──────────────┐
-                    ▼                             ▼
-       ┌────────────────────────┐    ┌────────────────────────┐
-       │    Repository Layer    │    │    API Service Layer   │
-       │    [TutorRepository]   │    │    [TutorApiService]   │
-       └────────────┬───────────┘    └────────────┬───────────┘
-                    │                             │
-                    ▼                             ▼
-       ┌────────────────────────┐    ┌────────────────────────┐
-       │      Local Storage     │    │   External Services    │
-       │   [Room SQLite DB]     │    │ [Gemini API / LLM Stream]│
-       └────────────────────────┘    └────────────────────────┘
+EstateFlow-AI/
+│
+├── app/
+├── components/
+├── lib/
+├── prisma/
+├── public/
+├── styles/
+├── hooks/
+├── services/
+├── types/
+├── utils/
+├── middleware.ts
+├── package.json
+└── README.md
 ```
 
 ---
 
-## 🗄️ Database Schema
+# 🚀 Installation
 
-AhdrAnglais stores progress data locally using **Room Database** for absolute security and offline access.
+Clone the repository:
 
-### 1. `conversation_sessions`
-| Column Name | SQLite Data Type | Constraints | Description |
-|---|---|---|---|
-| `id` | `TEXT` | `PRIMARY KEY` | Unique Session UUID |
-| `level` | `TEXT` | `NOT NULL` | Learner English level (`beginner`, `intermediate`, `advanced`) |
-| `topic` | `TEXT` | `NOT NULL` | Session Topic (e.g. *Travel*, *Daily Life*, *Business*) |
-| `createdAt` | `INTEGER` | `NOT NULL` | Epoch timestamp (milliseconds) |
-| `summary` | `TEXT` | `NULL` | Summarized recap generated by AI |
+```bash
+git clone https://github.com/yourusername/estateflow-ai.git
+```
 
-### 2. `chat_messages`
-| Column Name | SQLite Data Type | Constraints | Description |
-|---|---|---|---|
-| `id` | `TEXT` | `PRIMARY KEY` | Unique Message UUID |
-| `sessionId` | `TEXT` | `FOREIGN KEY` | References `conversation_sessions(id)` |
-| `sender` | `TEXT` | `NOT NULL` | Message speaker (`user` or `tutor`) |
-| `text` | `TEXT` | `NOT NULL` | Message transcription or textual payload |
-| `timestamp` | `INTEGER` | `NOT NULL` | Epoch timestamp (milliseconds) |
-| `correctedText`| `TEXT` | `NULL` | Grammar-corrected variant |
-| `correctionsJson`| `TEXT` | `NULL` | Detailed breakdown of corrections in JSON string |
+Go into the project:
 
-### 3. `vocabulary_words`
-| Column Name | SQLite Data Type | Constraints | Description |
-|---|---|---|---|
-| `word` | `TEXT` | `PRIMARY KEY` | Dictionary unique keyword |
-| `definition` | `TEXT` | `NOT NULL` | Detailed description or context meaning |
-| `exampleSentence`| `TEXT` | `NOT NULL` | Reference example of usage |
-| `createdAt` | `INTEGER` | `NOT NULL` | Added epoch timestamp |
-| `isLearned` | `INTEGER` | `NOT NULL` | Completion checkbox (`0` or `1`) |
+```bash
+cd estateflow-ai
+```
 
-### 4. `daily_streaks`
-| Column Name | SQLite Data Type | Constraints | Description |
-|---|---|---|---|
-| `id` | `INTEGER` | `PRIMARY KEY` (value `1`) | Single-row state table |
-| `currentStreak`| `INTEGER` | `NOT NULL` | Active streak count |
-| `lastCompletedDate`| `TEXT` | `NOT NULL` | ISO date string (`yyyy-MM-dd`) |
-| `longestStreak`| `INTEGER` | `NOT NULL` | All-time highest record count |
+Install dependencies:
 
----
+```bash
+npm install
+```
 
-## 🔑 Environment Variables & API Configuration
+Create the environment file:
 
-The application uses the standard **Secrets Gradle Plugin** to avoid hardcoding production credentials.
+```bash
+cp .env.example .env
+```
 
-Copy the `.env.example` file to `.env` in your project root, and populate it with your production token:
+Configure your environment variables:
 
 ```env
-GEMINI_API_KEY=your_gemini_api_token_here
+DATABASE_URL=
+NEXTAUTH_SECRET=
+NEXTAUTH_URL=
+GEMINI_API_KEY=
 ```
 
-### Accessing Secrets in Code
-The API token is securely injected into your `BuildConfig` variable:
+Run database migrations:
 
-```kotlin
-val apiKey = BuildConfig.GEMINI_API_KEY
+```bash
+npx prisma migrate dev
+```
+
+Generate Prisma Client:
+
+```bash
+npx prisma generate
+```
+
+Run the application:
+
+```bash
+npm run dev
+```
+
+Open:
+
+```
+http://localhost:3000
 ```
 
 ---
 
-## 🛠️ Installation
+# 📸 Screens
 
-### Prerequisites
-- **Android Studio** (Koala | Jellyfish or higher)
-- **Android SDK Platform** 34+
-- **JDK 17** configured in Gradle build settings
-
-### Step-by-Step Setup
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/koceirmehdi/AhdrAnglais.git
-   cd AhdrAnglais
-   ```
-2. **Apply API Secrets:**
-   Create a `.env` file in the project root with your Google AI Studio credentials.
-3. **Open and Synchronize Gradle:**
-   Open the root directory in Android Studio. Wait for the automatic Gradle configuration to finish.
-4. **Compile the Applet:**
-   Run the build directly to target your connected Android device or standard emulator:
-   ```bash
-   ./gradlew assembleDebug
-   ```
+* Login
+* Register
+* Dashboard
+* Properties
+* Property Details
+* AI Assistant
+* Favorites
+* Appointments
+* Messages
+* Analytics
+* Profile
 
 ---
 
-## 🧪 Testing
+# 🔒 Security
 
-AhdrAnglais contains comprehensive JVM and UI checks built with **Robolectric** and **Roborazzi**:
-
-- **Run Standard JVM Tests:**
-  ```bash
-  ./gradlew :app:testDebugUnitTest
-  ```
-- **Record Reference Screenshots:**
-  ```bash
-  ./gradlew :app:recordRoborazziDebug
-  ```
-- **Verify UI Screenshots against Reference Images:**
-  ```bash
-  ./gradlew :app:verifyRoborazziDebug
-  ```
+* JWT Authentication
+* Password Hashing
+* Protected Routes
+* Role-Based Authorization
+* Input Validation
+* SQL Injection Protection
+* XSS Protection
+* CSRF Protection
 
 ---
 
-## 🛣️ Future Enhancements
+# 🎯 Future Improvements
 
-- 📈 **Dynamic CEFR Assessment Reports:** Export vocabulary logs and historical grammar accuracy as printable PDF or CSV files.
-- 🌍 **Linguistic Support Integration:** Provide localized translation overlays and vocabulary hints directly in the conversational space.
-- 🗣️ **Detailed Pronunciation Evaluation:** Integrated syllable and phoneme-level checks utilizing real-time sound frequencies.
+* Mobile Application (Flutter / React Native)
+* AI Property Price Prediction
+* AI Market Analysis
+* Virtual Property Tours
+* Mortgage Calculator
+* Digital Contract Signing
+* Multi-language Support
+* Payment Integration
+* Email Notifications
+* SMS Notifications
+* Interactive Maps
+* AI Voice Assistant
 
 ---
 
-## 📄 License
+# 🤝 Contributing
 
-Distributed under the **MIT License**. Check out `LICENSE` for more detailed information.
+Contributions are welcome.
 
----
-
-## 🤝 Contributing
-
-Contributions make the open-source community an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push your branch
 5. Open a Pull Request
+
+---
+
+# 📄 License
+
+This project is licensed under the MIT License.
+
+---
+
+# 👨‍💻 Author
+
+Developed by **Mehdi Koceir**
+
+**Computer Systems & Networks (SIR) Student**
+
+Specializing in:
+
+* AI Applications
+* Full-Stack Web Development
+* Mobile Development
+* AI Workflow Automation
+* Real Estate Technology
+
+---
+
+## ⭐ If you like this project, consider giving it a star on GitHub!
+
+
+<img width="2176" height="1632" alt="image" src="https://github.com/user-attachments/assets/37476fed-70d3-40bb-b2e2-8fe168ebf2b5" />
+<img width="2176" height="1632" alt="image" src="https://github.com/user-attachments/assets/362dd0f9-2044-4b04-adcf-e6eb5a23de55" />
+<img width="2176" height="1632" alt="image" src="https://github.com/user-attachments/assets/6ae837d4-874e-4ea2-a0fd-09dfb6c196d9" />
+<img width="2176" height="1632" alt="image" src="https://github.com/user-attachments/assets/6fc1fc30-ec32-44d9-9b0d-9a3c8fd73027" />
+
+
+
+
