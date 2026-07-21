@@ -40,12 +40,14 @@ class TutorApiService(private val prefs: PreferencesHelper) {
         level: String,
         topic: String,
         messages: List<ChatMessage>,
+        agentConfig: AgentConfig? = null,
+        memories: List<AgentMemory> = emptyList(),
         onChunk: (String) -> Unit
     ) = withContext(Dispatchers.IO) {
         if (prefs.useDemoMode) {
             generateDemoStream(level, topic, messages, onChunk)
         } else if (prefs.useGeminiDirect) {
-            generateGeminiStream(level, topic, messages, onChunk)
+            generateGeminiStream(level, topic, messages, agentConfig, memories, onChunk)
         } else {
             generateOllamaStream(conversationId, level, messages.lastOrNull()?.text ?: "", onChunk)
         }
@@ -80,11 +82,33 @@ class TutorApiService(private val prefs: PreferencesHelper) {
         return buildKey
     }
 
+    private fun isRoboticResponse(text: String): Boolean {
+        val lower = text.lowercase()
+        val forbiddenPhrases = listOf(
+            "fantastic topic",
+            "specific aspect",
+            "elaborate",
+            "tell me more",
+            "interesting topic",
+            "what would you like to know",
+            "explain further",
+            "could you elaborate",
+            "that's interesting",
+            "thats interesting",
+            "can you explain further",
+            "what specific aspect",
+            "what would you like to know about"
+        )
+        return forbiddenPhrases.any { lower.contains(it) }
+    }
+
     // --- Gemini Streaming Implementation ---
     private suspend fun generateGeminiStream(
         level: String,
         topic: String,
         messages: List<ChatMessage>,
+        agentConfig: AgentConfig? = null,
+        memories: List<AgentMemory> = emptyList(),
         onChunk: (String) -> Unit
     ) {
         val apiKey = getGeminiApiKey()
@@ -143,25 +167,114 @@ class TutorApiService(private val prefs: PreferencesHelper) {
             """.trimIndent()
         }
 
+        val activePersona = agentConfig?.personaType ?: "Balanced Teacher"
+        val customDirectives = agentConfig?.baseInstructionOverride ?: ""
+        
+        val memoriesBlock = if (memories.isNotEmpty()) {
+            "=== STUDENT RETRIEVED SEMANTIC MEMORIES ===\n" +
+            "The following facts are retrieved from your semantic memory store about this student. Personalise the chat experience and refer to these details naturally if appropriate:\n" +
+            memories.take(12).joinToString("\n") { "• [${it.category}] ${it.fact}" }
+        } else {
+            ""
+        }
+
         // System prompt for AhdrAnglais
         val systemPrompt = """
-            You are a friendly, patient English tutor. 
-            You help the user practice English conversation.
-            Topic for this session: $topic.
-            User's English Level: $level.
-            
+            You are "AhdrAnglais", an expert, friendly, and patient Native English Tutor. Your background is as a professional ESL teacher from the United States with years of experience guiding international students. You combine the warm, playful encouragement of Duolingo, the real-world flow and active conversational style of Cambly, the analytical accuracy of a linguistic expert, and the structured guidance of a native speaker.
+
+            ACTIVE PERSONA STYLE: $activePersona
+            CUSTOM TEACHER DIRECTIVES: $customDirectives
+
+            $memoriesBlock
+
+            Current Session Context:
+            - Topic: $topic
+            - Student's English Proficiency Level: $level
+
             Theme-Specific Vocabulary Guidance:
             $themeVocabularyGuidance
-            
-            Guidelines:
-            - If the user shifts the topic, introduces a new subject, or asks to talk about something specific, follow their lead immediately and adapt the conversation to their requested subject. Do not stick rigidly to the initial topic if they want to talk about something else.
-            - Adapt your vocabulary and sentence complexity to the user's level ($level).
-              * beginner: Use simple vocabulary, short sentences, and highly clear syntax.
-              * intermediate: Use moderate vocabulary, clear grammar, and some useful idioms.
-              * advanced: Speak like a native, using rich vocabulary, idioms, and natural flow.
-            - Correct the user's mistakes gently if you spot any, explain why, and keep the conversation flowing.
-            - CRITICAL: You MUST ALWAYS end your response with a highly relevant, natural, open-ended follow-up question. This question must connect directly to what the user said, match their English proficiency level ($level), and keep the conversation active and engaging. Never leave the user without a clear, inviting prompt to answer!
-            - Keep your responses concise (2 to 4 sentences) so the user doesn't get overwhelmed, but ensure the final sentence is always that high-quality, open-ended follow-up question.
+
+            Your mission is to practice English conversation with the user, teach them naturally, keep the dialogue flowing, and improve their grammar, vocabulary, and confidence.
+
+            === LEVEL-BASED ADAPTATION GATES (CRITICAL) ===
+            You MUST dynamically adjust your language, sentence complexity, and expectations according to the student's level ($level):
+
+            1. BEGINNER (A1):
+               - Vocabulary: Limit to the most common 500 English words. No idioms, phrasal verbs, or complex jargon.
+               - Sentences: Use very short sentences (max 6-8 words) with simple subject-verb-object structure.
+               - Grammar: Use simple present ("I like"), simple past ("I went"), and simple future ("I will"). Avoid conditional or passive tenses.
+               - Questions: Extremely clear, concrete, and easy (e.g., "What is your favorite food?").
+               - Tone: Hyper-encouraging, gentle, and highly supportive.
+
+            2. ELEMENTARY (A2):
+               - Vocabulary: Simple daily vocabulary (max 1000 words).
+               - Sentences: Short sentences (max 10-12 words). Use basic coordinators like "and", "but", "because".
+               - Grammar: Basic tenses, simple modal verbs (can, should, must).
+               - Questions: Straightforward, concrete everyday questions (e.g., "What do you usually do on Saturdays?").
+               - Tone: Gentle, warm, and clear.
+
+            3. INTERMEDIATE (B1):
+               - Vocabulary: Standard conversational vocabulary. Introduce 1 new vocabulary word or simple phrasal verb per turn and briefly explain it.
+               - Sentences: Medium complexity (max 15-18 words).
+               - Grammar: Mix of simple and compound sentences, basic conditionals, and perfect tenses.
+               - Questions: Reflective, personal experiences (e.g., "How did you feel when you first started that job?").
+               - Tone: Professional, encouraging, and engaging.
+
+            4. UPPER INTERMEDIATE (B2):
+               - Vocabulary: Professional and rich vocabulary. Integrate native expressions and phrasal verbs naturally.
+               - Sentences: Complex structures, natural speed.
+               - Grammar: Various conditional forms, passive voice, modal verbs of deduction.
+               - Questions: Expressing opinions, justifying choices (e.g., "What are the pros and cons of working in a large team?").
+               - Tone: Highly engaging, intellectual, and peer-to-peer.
+
+            5. ADVANCED (C1-C2):
+               - Vocabulary: Highly sophisticated, rich, and varied native vocabulary. Professional terms, literary metaphors, and native idioms.
+               - Sentences: Fully natural, complex, and unconstrained native-level phrasing.
+               - Grammar: Full mastery of all English structures.
+               - Questions: Analytical, philosophical, or deep abstract questions on the topic.
+               - Tone: Professional, articulate, and deep.
+
+            === CONVERSATIONAL FLOW & REAL-TIME PEDAGOGY ===
+            - ACT LIKE A REAL HUMAN TUTOR: Always acknowledge and react to the content of the student's message first. Show genuine interest, warmth, and active listening. NEVER give robotic or canned responses.
+            - KEEP IT CONCISE: Keep the natural conversational part to 2-3 sentences. Never overwhelm the student with long walls of text.
+            - LEAD THE CONVERSATION: ALWAYS end your response with a single, highly relevant, level-appropriate, open-ended follow-up question.
+            - TOPIC FLEXIBILITY: If the student shifts the topic, introduces a new subject, or asks to talk about something specific, follow their lead immediately and adapt the conversation to their requested subject. Never stick rigidly to the predefined topic if they want to pivot.
+            - PREVENT REPETITION: Do not start consecutive sentences with the same words (e.g., "That is...", "It is..."). Keep each response unique and authentic.
+
+            === SYSTEM OUTPUT FORMAT STRUCTURES ===
+
+            1. GRAMMAR CORRECTION PIPELINE:
+               Analyze the student's last message for grammar, spelling, vocabulary, capitalization, or punctuation mistakes.
+               If there is a mistake, you MUST gently correct it using one of these EXACT templates so our app's parsing engine can highlight it for the student:
+               
+               - Pattern A: Instead of "[suboptimal segment]", you should say "[corrected segment]" because [clear, level-appropriate explanation].
+               - Pattern B: "[suboptimal segment]" should be "[corrected segment]" - [clear, level-appropriate explanation].
+               - Pattern C: Change "[suboptimal segment]" to "[corrected segment]" because [clear, level-appropriate explanation].
+               - Pattern D: You said "[suboptimal segment]", but it should be "[corrected segment]": [clear, level-appropriate explanation].
+
+               Example: "Great! One small correction: You said 'am good thanks for asking', but it should be 'I'm good, thanks for asking.': Always use 'I'm' instead of 'am' when talking about yourself, and add a comma after good."
+               If the user's sentence is perfectly correct, praise them briefly and carry on with the natural dialogue. Do not force a correction if they made no mistake.
+
+            2. VOCABULARY FOCUS OUTPUT:
+               Highlight 1 or 2 useful English words or idioms that fit the current topic or conversation flow, formatted exactly like this:
+               💡 Vocabulary: **[Word/Phrase]** - *[Brief definition]* (e.g., "[A short example sentence using the word]")
+
+            3. PRACTICAL LEARNING TIPS:
+               Occasionally include a helpful language tip about native pronunciation, everyday usage, or cultural nuances, formatted exactly like this:
+               📌 Tip: [A short, friendly, and practical English learning tip about pronunciation, grammar rule, or cultural context suitable for the user's current level].
+
+            === CRITICAL NEGATIVE CONSTRAINTS (NEVER DO THESE) ===
+            You MUST NEVER use any of these robotic, clichéd, or generic template expressions under any circumstances:
+            - "That's a fantastic topic." or "That is a fantastic topic."
+            - "That's interesting." or "That is interesting."
+            - "What specific aspect..." or "What specific part..."
+            - "Could you elaborate?" or "Can you elaborate?"
+            - "Tell me more."
+            - "What would you like to know about..."
+            - "Can you explain further..."
+            - "How can I help you today?" or "How can I assist you?"
+            - "Let's explore..."
+            Instead, show empathy, react to the specific context like a native speaker, and ask genuine, level-appropriate follow-up questions.
         """.trimIndent()
 
         // Build history in Gemini format (ensuring sequence starts with 'user' and alternates strictly)
@@ -204,38 +317,33 @@ class TutorApiService(private val prefs: PreferencesHelper) {
         val requestJson = JSONObject().apply {
             put("contents", JSONArray(geminiContents))
             put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", systemPrompt))))
-            put("generationConfig", JSONObject().put("temperature", 0.7))
+            put("generationConfig", JSONObject().put("temperature", agentConfig?.temperature ?: 0.75f))
         }
 
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:streamGenerateContent?key=$apiKey"
-        val request = Request.Builder()
-            .url(url)
-            .post(requestJson.toString().toRequestBody(mediaTypeJson))
-            .build()
+        var attempts = 0
+        var validatedResponse = ""
+        var success = false
+        val maxAttempts = 3
 
-        try {
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    onChunk("[Error: HTTP ${response.code} from Gemini. Make sure your API key is correct.]")
-                    return@use
-                }
-                val reader = BufferedReader(InputStreamReader(response.body?.byteStream()))
-                var line: String?
-                // Gemini returns stream as a JSON array of responses, line-by-line
-                while (reader.readLine().also { line = it } != null) {
-                    val lineText = line?.trim() ?: continue
-                    if (lineText.isEmpty()) continue
-                    
-                    try {
-                        // Extract text from SSE chunk
-                        // Format is typically a line starting with {"candidates": ...}
-                        // Or wrapped in [ ..., ... ]
-                        var cleaned = lineText
-                        if (cleaned.startsWith("[")) cleaned = cleaned.substring(1)
-                        if (cleaned.endsWith(",")) cleaned = cleaned.substring(0, cleaned.length - 1)
-                        if (cleaned.endsWith("]")) cleaned = cleaned.substring(0, cleaned.length - 1)
-                        
-                        val json = JSONObject(cleaned)
+        while (attempts < maxAttempts && !success) {
+            attempts++
+            Log.d(TAG, "Generating Gemini response, attempt $attempts")
+            val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$apiKey"
+            val request = Request.Builder()
+                .url(url)
+                .post(requestJson.toString().toRequestBody(mediaTypeJson))
+                .build()
+
+            try {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        validatedResponse = "[Error: HTTP ${response.code} from Gemini. Make sure your API key is correct.]"
+                        attempts = maxAttempts // Break the retry loop for API errors
+                        return@use
+                    }
+                    val bodyString = response.body?.string() ?: ""
+                    if (bodyString.isNotEmpty()) {
+                        val json = JSONObject(bodyString)
                         val candidates = json.optJSONArray("candidates")
                         if (candidates != null && candidates.length() > 0) {
                             val firstCand = candidates.getJSONObject(0)
@@ -244,18 +352,40 @@ class TutorApiService(private val prefs: PreferencesHelper) {
                             if (parts != null && parts.length() > 0) {
                                 val text = parts.getJSONObject(0).optString("text")
                                 if (text.isNotEmpty()) {
-                                    onChunk(text)
+                                    if (isRoboticResponse(text)) {
+                                        Log.w(TAG, "Robotic response detected on attempt $attempts: '$text'")
+                                        validatedResponse = text // Fallback
+                                    } else {
+                                        validatedResponse = text
+                                        success = true
+                                    }
                                 }
                             }
                         }
-                    } catch (e: Exception) {
-                        // Ignore individual line parse errors as some lines may be delimiters
                     }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error on attempt $attempts", e)
+                validatedResponse = "[Error: Network connection failed. ${e.localizedMessage}]"
+                if (attempts >= maxAttempts) {
+                    break
+                }
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Gemini stream error", e)
-            onChunk("[Error: Network connection failed. ${e.localizedMessage}]")
+        }
+
+        if (validatedResponse.isNotEmpty()) {
+            // Simulate streaming for a smoother, premium typing experience in the UI
+            val chunkSize = 6
+            var currentIndex = 0
+            while (currentIndex < validatedResponse.length) {
+                val endIndex = (currentIndex + chunkSize).coerceAtMost(validatedResponse.length)
+                val chunk = validatedResponse.substring(currentIndex, endIndex)
+                onChunk(chunk)
+                currentIndex = endIndex
+                kotlinx.coroutines.delay(12) // premium smooth typing effect
+            }
+        } else {
+            onChunk("I'm sorry, I couldn't formulate a response. Let's try speaking again!")
         }
     }
 
@@ -338,17 +468,20 @@ class TutorApiService(private val prefs: PreferencesHelper) {
         if (apiKey.isEmpty()) return null
 
         val prompt = """
-            Analyze the following English sentence for grammar, spelling, vocabulary, or phrasing mistakes:
+            You are an elite, highly precise English Grammar Correction Analyzer.
+            Analyze the following English sentence for any grammatical, spelling, vocabulary, capitalization, spacing, or phrasing mistakes:
             "$text"
             
-            Return a JSON object with:
-            1. "corrected": the fully corrected sentence (or identical to original if correct).
-            2. "corrections": an array of items, each with:
-               - "original": the exact part that is wrong/suboptimal.
-               - "fixed": the corrected part.
-               - "reason": a clear, helpful explanation of why it is incorrect or how it can be improved.
+            Evaluate it carefully, even checking for missing capitalization of "I", basic punctuation, or wrong prepositions.
             
-            If there are absolutely no mistakes, the corrections array must be empty and corrected must match the input exactly.
+            Return a JSON object with:
+            1. "corrected": the fully corrected, polished, and natural version of the sentence (keep it identical to the original if it is already perfectly correct).
+            2. "corrections": an array of correction items, each with:
+               - "original": the exact part of the input sentence that is wrong, suboptimal, or misspelled.
+               - "fixed": the corrected or improved version of that part.
+               - "reason": a clear, friendly, and highly educational explanation (under 15 words) of why it was changed and what rule applies.
+            
+            If there are absolutely no mistakes, the corrections array must be empty and the "corrected" field must be exactly identical to the input sentence.
         """.trimIndent()
 
         val responseSchemaJson = JSONObject().apply {
@@ -654,11 +787,11 @@ class TutorApiService(private val prefs: PreferencesHelper) {
 
         val responseText = when {
             dynamicTopic != null -> {
-                "Oh, **$dynamicTopic** is a fantastic topic to talk about! What specific aspect of $dynamicTopic interests you the most, or do you have a favorite memory/story related to it?"
+                "I would love to chat about **$dynamicTopic**! It is a great choice. To get our conversation started, what is your favorite thing or experience related to $dynamicTopic?"
             }
             isGreeting -> {
                 if (isFreeTalk) {
-                    "Hello there! It is wonderful to talk with you. How has your day been so far, or is there any specific topic you'd like to chat about today?"
+                    "Hello! It is wonderful to practice English with you today. How has your week been going so far?"
                 } else {
                     "Hello! Let's get started with our practice on **$topic**. " + getTopicQuestion(topic, 0, lastUserMessage)
                 }
@@ -761,12 +894,12 @@ class TutorApiService(private val prefs: PreferencesHelper) {
                         }
                         else -> {
                             when (userMessageCount) {
-                                0 -> "Hello! Welcome to our Free Talk session. We can discuss anything you'd like today. How has your day been so far, or is there a specific topic you want to chat about?"
-                                1 -> "That sounds really interesting! What got you interested in that, or could you share a bit more about your thoughts on it?"
-                                2 -> "I see! That's a very interesting perspective. In your experience, what do you think is the most exciting or important aspect of that?"
-                                3 -> "That makes a lot of sense, and it's really interesting to hear your thoughts. By the way, is this something you enjoy discussing or doing in your daily life as well?"
-                                4 -> "That's awesome! It's great to hear more about your thoughts. What originally got you interested in this area?"
-                                else -> "I am really enjoying our conversation! You are doing a fantastic job expressing your thoughts in English. What other areas would you like us to explore together?"
+                                0 -> "Hi! Welcome to our conversation practice. We can talk about anything you like! To kick things off, how has your week been so far?"
+                                1 -> "I'd love to hear more about that! English tip: when discussing your thoughts, you can start with 'In my view...'. What is something about this that surprised you recently?"
+                                2 -> "That is a very unique way to look at it! Tell me, how does this topic relate to your own hobbies or everyday routine?"
+                                3 -> "I completely understand! It's wonderful how we can express such diverse ideas in English. By the way, do you get many opportunities to discuss this with friends?"
+                                4 -> "Awesome! You are communicating so clearly today. To practice some descriptive words, how would you describe this topic to someone who has never heard of it?"
+                                else -> "I'm really enjoying our chat! Your English is flowing so naturally. Is there another topic you'd like to dive into, or should we keep exploring this one?"
                             }
                         }
                     }

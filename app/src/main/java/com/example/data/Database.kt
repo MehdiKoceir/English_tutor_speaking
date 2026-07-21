@@ -79,7 +79,67 @@ interface TutorDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDailyStreak(streak: DailyStreakRecord)
+
+    // --- AI Agent Memories Queries ---
+    @Query("SELECT * FROM agent_memories ORDER BY createdAt DESC")
+    fun getAllAgentMemories(): Flow<List<AgentMemory>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAgentMemory(memory: AgentMemory)
+
+    @Query("DELETE FROM agent_memories WHERE id = :memoryId")
+    suspend fun deleteAgentMemory(memoryId: String)
+
+    @Query("DELETE FROM agent_memories")
+    suspend fun clearAllMemories()
+
+    // --- AI Agent Config Queries ---
+    @Query("SELECT * FROM agent_config WHERE id = 1 LIMIT 1")
+    suspend fun getAgentConfig(): AgentConfig?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAgentConfig(config: AgentConfig)
+
+    // --- AI Agent Training Logs Queries ---
+    @Query("SELECT * FROM agent_training_logs ORDER BY timestamp DESC")
+    fun getAllTrainingLogs(): Flow<List<AgentTrainingLog>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTrainingLog(log: AgentTrainingLog)
+
+    @Query("DELETE FROM agent_training_logs")
+    suspend fun clearAllTrainingLogs()
 }
+
+@Entity(tableName = "agent_memories")
+data class AgentMemory(
+    @PrimaryKey val id: String, // UUID
+    val category: String,       // "Interest", "Grammar Bug", "Tone Pref", "Vocabulary"
+    val fact: String,           // e.g., "Enjoys talking about Lionel Messi and football"
+    val createdAt: Long,
+    val weight: Float = 1.0f    // Connection weight / relevance
+)
+
+@Entity(tableName = "agent_config")
+data class AgentConfig(
+    @PrimaryKey val id: Int = 1,
+    val name: String = "AhdrAnglais",
+    val personaType: String = "Balanced Teacher", // "Friendly Peer", "Strict Grammarian", "IELTS Expert"
+    val temperature: Float = 0.75f,
+    val baseInstructionOverride: String = "",
+    val trainingIterationCount: Int = 0,
+    val lossHistoryJson: String = "[]" // JSON representation of training loss list
+)
+
+@Entity(tableName = "agent_training_logs")
+data class AgentTrainingLog(
+    @PrimaryKey val id: String, // UUID
+    val epoch: Int,
+    val loss: Float,
+    val accuracy: Float,
+    val feedbackSample: String,
+    val timestamp: Long
+)
 
 @Entity(tableName = "vocabulary_words")
 data class VocabularyWord(
@@ -98,7 +158,19 @@ data class DailyStreakRecord(
     val longestStreak: Int = 0
 )
 
-@Database(entities = [ConversationSession::class, ChatMessage::class, VocabularyWord::class, DailyStreakRecord::class], version = 3, exportSchema = false)
+@Database(
+    entities = [
+        ConversationSession::class,
+        ChatMessage::class,
+        VocabularyWord::class,
+        DailyStreakRecord::class,
+        AgentMemory::class,
+        AgentConfig::class,
+        AgentTrainingLog::class
+    ],
+    version = 4,
+    exportSchema = false
+)
 abstract class TutorDatabase : RoomDatabase() {
     abstract fun tutorDao(): TutorDao
 
@@ -125,6 +197,8 @@ abstract class TutorDatabase : RoomDatabase() {
 class TutorRepository(private val tutorDao: TutorDao) {
     val allSessions: Flow<List<ConversationSession>> = tutorDao.getAllSessions()
     val allVocabularyWords: Flow<List<VocabularyWord>> = tutorDao.getAllVocabularyWords()
+    val allAgentMemories: Flow<List<AgentMemory>> = tutorDao.getAllAgentMemories()
+    val allTrainingLogs: Flow<List<AgentTrainingLog>> = tutorDao.getAllTrainingLogs()
 
     fun getMessagesForSession(sessionId: String): Flow<List<ChatMessage>> {
         return tutorDao.getMessagesForSession(sessionId)
@@ -181,5 +255,36 @@ class TutorRepository(private val tutorDao: TutorDao) {
 
     suspend fun insertDailyStreak(streak: DailyStreakRecord) {
         tutorDao.insertDailyStreak(streak)
+    }
+
+    // --- AI Agent Methods ---
+    suspend fun getAgentConfig(): AgentConfig {
+        return tutorDao.getAgentConfig() ?: AgentConfig().also {
+            tutorDao.insertAgentConfig(it)
+        }
+    }
+
+    suspend fun insertAgentConfig(config: AgentConfig) {
+        tutorDao.insertAgentConfig(config)
+    }
+
+    suspend fun insertAgentMemory(memory: AgentMemory) {
+        tutorDao.insertAgentMemory(memory)
+    }
+
+    suspend fun deleteAgentMemory(memoryId: String) {
+        tutorDao.deleteAgentMemory(memoryId)
+    }
+
+    suspend fun clearAllMemories() {
+        tutorDao.clearAllMemories()
+    }
+
+    suspend fun insertTrainingLog(log: AgentTrainingLog) {
+        tutorDao.insertTrainingLog(log)
+    }
+
+    suspend fun clearAllTrainingLogs() {
+        tutorDao.clearAllTrainingLogs()
     }
 }

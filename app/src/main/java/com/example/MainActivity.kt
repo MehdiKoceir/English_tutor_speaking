@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -51,6 +53,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private val prefs by lazy { com.example.data.PreferencesHelper(this) }
 
     private var speechRecognizer: SpeechRecognizer? = null
+    private var webSpeechRecognizer: com.example.data.WebSpeechRecognizer? = null
     private var textToSpeech: TextToSpeech? = null
     private var isTtsInitialized = false
 
@@ -217,15 +220,6 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private fun startSpeechInputInternal() {
         runOnUiThread {
             try {
-                if (speechRecognizer == null) {
-                    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
-                }
-
-                // Reset state variables
-                isListeningState.value = true
-                transcribedTextState.value = "Listening..."
-                rmsDbState.value = 0f
-
                 // Dynamically fetch target practice language accent
                 val currentLanguage = when (prefs.ttsLocale) {
                     "UK" -> "en-GB"
@@ -235,80 +229,141 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     else -> "en-US"
                 }
 
-                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, currentLanguage)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, currentLanguage)
-                    putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, currentLanguage)
-                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
-                    // Robust timing configurations for language learners
-                    putExtra("android.speech.extra.SPEECH_INPUT_MINIMUM_LENGTH_MILLIS", 3000L)
-                    putExtra("android.speech.extra.SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS", 2000L)
-                    putExtra("android.speech.extra.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", 2000L)
+                if (prefs.useWebSpeechAPI) {
+                    Log.d(TAG, "Using Web Speech API for voice recognition")
+                    isListeningState.value = true
+                    transcribedTextState.value = "Listening..."
+                    
+                    // Live microphone animation simulator for Web Speech API
+                    val rmsHandler = Handler(Looper.getMainLooper())
+                    val rmsRunnable = object : Runnable {
+                        override fun run() {
+                            if (isListeningState.value && transcribedTextState.value != "Processing...") {
+                                rmsDbState.value = (0.1f + Math.random().toFloat() * 0.6f).coerceIn(0.01f, 1.0f)
+                                rmsHandler.postDelayed(this, 120)
+                            } else {
+                                rmsDbState.value = 0f
+                            }
+                        }
+                    }
+                    rmsHandler.post(rmsRunnable)
+
+                    if (webSpeechRecognizer == null) {
+                        webSpeechRecognizer = com.example.data.WebSpeechRecognizer(
+                            context = this,
+                            onReady = {
+                                Log.d(TAG, "WebSpeechRecognizer is fully ready. Starting listening.")
+                                webSpeechRecognizer?.startListening(currentLanguage)
+                            },
+                            onSpeechStart = {
+                                isListeningState.value = true
+                                transcribedTextState.value = "Listening..."
+                            },
+                            onSpeechEnd = {
+                                transcribedTextState.value = "Processing..."
+                            },
+                            onResult = { text, isFinal ->
+                                transcribedTextState.value = text
+                                if (isFinal && text.trim().isNotEmpty()) {
+                                    onSpeechResultCallback?.invoke(text)
+                                    isListeningState.value = false
+                                }
+                            },
+                            onError = { err ->
+                                Log.e(TAG, "Web Speech API Error: $err")
+                                transcribedTextState.value = "Error: $err"
+                                // Let the user retry or cancel
+                            }
+                        )
+                    } else {
+                        webSpeechRecognizer?.startListening(currentLanguage)
+                    }
+                } else {
+                    Log.d(TAG, "Using Native Android SpeechRecognizer for voice recognition")
+                    if (speechRecognizer == null) {
+                        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+                    }
+
+                    // Reset state variables
+                    isListeningState.value = true
+                    transcribedTextState.value = "Listening..."
+                    rmsDbState.value = 0f
+
+                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, currentLanguage)
+                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, currentLanguage)
+                        putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, currentLanguage)
+                        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+                        // Robust timing configurations for language learners
+                        putExtra("android.speech.extra.SPEECH_INPUT_MINIMUM_LENGTH_MILLIS", 3000L)
+                        putExtra("android.speech.extra.SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS", 2000L)
+                        putExtra("android.speech.extra.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", 2000L)
+                    }
+
+                    speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+                        override fun onReadyForSpeech(params: Bundle?) {
+                            isListeningState.value = true
+                            transcribedTextState.value = "Listening..."
+                        }
+
+                        override fun onBeginningOfSpeech() {
+                            transcribedTextState.value = "Listening..."
+                        }
+
+                        override fun onRmsChanged(rmsdB: Float) {
+                            // Map live DB levels (typically -2dB to 10dB+) to 0.01f to 1.0f range
+                            val normalized = ((rmsdB + 2.0f) / 12.0f).coerceIn(0.01f, 1.0f)
+                            rmsDbState.value = normalized
+                        }
+
+                        override fun onBufferReceived(buffer: ByteArray?) {}
+
+                        override fun onEndOfSpeech() {
+                            transcribedTextState.value = "Processing..."
+                        }
+
+                        override fun onError(error: Int) {
+                            val message = when (error) {
+                                SpeechRecognizer.ERROR_AUDIO -> "Audio recording error. Check your microphone."
+                                SpeechRecognizer.ERROR_CLIENT -> "Speech recognition client error. Ensure Speech Services by Google are enabled."
+                                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is required."
+                                SpeechRecognizer.ERROR_NETWORK -> "Network connection error."
+                                SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network connection timeout."
+                                SpeechRecognizer.ERROR_NO_MATCH -> "No speech recognized. Please speak closer to the microphone."
+                                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech recognition engine is busy. Please try again."
+                                SpeechRecognizer.ERROR_SERVER -> "Server processing error."
+                                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected. Please try again."
+                                else -> "Speech recognition failed. Please try again."
+                            }
+                            Log.e(TAG, "Speech Error: $message ($error)")
+                            transcribedTextState.value = "Error: $message"
+                            // Keep dialog open so user can see error and click Retry
+                        }
+
+                        override fun onResults(results: Bundle?) {
+                            val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                            if (!matches.isNullOrEmpty()) {
+                                val resultText = matches[0]
+                                transcribedTextState.value = resultText
+                                onSpeechResultCallback?.invoke(resultText)
+                            }
+                            isListeningState.value = false
+                        }
+
+                        override fun onPartialResults(partialResults: Bundle?) {
+                            val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                            if (!matches.isNullOrEmpty()) {
+                                transcribedTextState.value = matches[0]
+                            }
+                        }
+
+                        override fun onEvent(eventType: Int, params: Bundle?) {}
+                    })
+
+                    speechRecognizer?.startListening(intent)
                 }
-
-                speechRecognizer?.setRecognitionListener(object : RecognitionListener {
-                    override fun onReadyForSpeech(params: Bundle?) {
-                        isListeningState.value = true
-                        transcribedTextState.value = "Listening..."
-                    }
-
-                    override fun onBeginningOfSpeech() {
-                        transcribedTextState.value = "Listening..."
-                    }
-
-                    override fun onRmsChanged(rmsdB: Float) {
-                        // Map live DB levels (typically -2dB to 10dB+) to 0.01f to 1.0f range
-                        val normalized = ((rmsdB + 2.0f) / 12.0f).coerceIn(0.01f, 1.0f)
-                        rmsDbState.value = normalized
-                    }
-
-                    override fun onBufferReceived(buffer: ByteArray?) {}
-
-                    override fun onEndOfSpeech() {
-                        transcribedTextState.value = "Processing..."
-                    }
-
-                    override fun onError(error: Int) {
-                        val message = when (error) {
-                            SpeechRecognizer.ERROR_AUDIO -> "Audio recording error. Check your microphone."
-                            SpeechRecognizer.ERROR_CLIENT -> "Speech recognition client error. Ensure Speech Services by Google are enabled."
-                            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is required."
-                            SpeechRecognizer.ERROR_NETWORK -> "Network connection error."
-                            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network connection timeout."
-                            SpeechRecognizer.ERROR_NO_MATCH -> "No speech recognized. Please speak closer to the microphone."
-                            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech recognition engine is busy. Please try again."
-                            SpeechRecognizer.ERROR_SERVER -> "Server processing error."
-                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected. Please try again."
-                            else -> "Speech recognition failed. Please try again."
-                        }
-                        Log.e(TAG, "Speech Error: $message ($error)")
-                        transcribedTextState.value = "Error: $message"
-                        // Keep dialog open so user can see error and click Retry
-                    }
-
-                    override fun onResults(results: Bundle?) {
-                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        if (!matches.isNullOrEmpty()) {
-                            val resultText = matches[0]
-                            transcribedTextState.value = resultText
-                            onSpeechResultCallback?.invoke(resultText)
-                        }
-                        isListeningState.value = false
-                    }
-
-                    override fun onPartialResults(partialResults: Bundle?) {
-                        val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        if (!matches.isNullOrEmpty()) {
-                            transcribedTextState.value = matches[0]
-                        }
-                    }
-
-                    override fun onEvent(eventType: Int, params: Bundle?) {}
-                })
-
-                speechRecognizer?.startListening(intent)
             } catch (e: Exception) {
                 Log.e(TAG, "Error starting speech recognizer", e)
                 Toast.makeText(this, "Speech recognition is not supported on this device.", Toast.LENGTH_SHORT).show()
@@ -320,7 +375,11 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private fun stopListening() {
         runOnUiThread {
             try {
-                speechRecognizer?.cancel()
+                if (prefs.useWebSpeechAPI) {
+                    webSpeechRecognizer?.stopListening()
+                } else {
+                    speechRecognizer?.cancel()
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Error stopping/cancelling speech recognizer", e)
             }
@@ -331,6 +390,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     override fun onDestroy() {
         super.onDestroy()
         speechRecognizer?.destroy()
+        webSpeechRecognizer?.destroy()
         textToSpeech?.stop()
         textToSpeech?.shutdown()
     }

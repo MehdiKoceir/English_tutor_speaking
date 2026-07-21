@@ -69,6 +69,7 @@ sealed class Screen(val route: String) {
     object History : Screen("history")
     object Vocabulary : Screen("vocabulary")
     object Settings : Screen("settings")
+    object AgentStudio : Screen("agent_studio")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -204,6 +205,9 @@ fun MainAppNavigation(
                     viewModel = viewModel,
                     onStartChat = {
                         currentScreen = Screen.Chat
+                    },
+                    onNavigateToAgentStudio = {
+                        currentScreen = Screen.AgentStudio
                     }
                 )
                 Screen.Chat -> {
@@ -248,6 +252,10 @@ fun MainAppNavigation(
                     }
                 )
                 Screen.Settings -> SettingsScreen(viewModel = viewModel)
+                Screen.AgentStudio -> AgentStudioScreen(
+                    viewModel = viewModel,
+                    onBack = { currentScreen = Screen.Home }
+                )
             }
         }
     }
@@ -515,14 +523,15 @@ fun WelcomeFeatureItem(
 @Composable
 fun HomeScreen(
     viewModel: TutorViewModel,
-    onStartChat: () -> Unit
+    onStartChat: () -> Unit,
+    onNavigateToAgentStudio: () -> Unit
 ) {
     var selectedLevel by remember { mutableStateOf("Beginner") }
     var selectedTopic by remember { mutableStateOf("Free Talk") }
     val isDark = isSystemInDarkTheme()
     val currentSession by viewModel.currentSession.collectAsState()
 
-    val levels = listOf("Beginner", "Intermediate", "Advanced")
+    val levels = listOf("Beginner", "Elementary", "Intermediate", "Upper Intermediate", "Advanced")
     val topics = listOf(
         TopicItem("Free Talk", Icons.Default.Chat, "Practice natural, open conversation on any topic."),
         TopicItem("Job Interview", Icons.Default.Work, "Mock interview practice with typical professional questions."),
@@ -669,6 +678,87 @@ fun HomeScreen(
                             color = Color.White
                         )
                     }
+                }
+            }
+        }
+
+        // AI Agent & Memory Studio banner
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigateToAgentStudio() }
+                    .padding(vertical = 4.dp),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isDark) Color(0x1F8B5CF6) else Color(0x0F8B5CF6)
+                ),
+                border = BorderStroke(
+                    1.dp,
+                    Brush.linearGradient(
+                        colors = listOf(Color(0xFF8B5CF6).copy(alpha = 0.5f), Color(0xFF4F46E5).copy(alpha = 0.5f))
+                    )
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(Color(0xFF8B5CF6), Color(0xFF4F46E5))
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Psychology,
+                            contentDescription = "AI Agent",
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "AI Agent & Memory Studio",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .background(Color(0xFFFF007F), RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "PRO",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 8.sp,
+                                        color = Color.White
+                                    )
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Configure teacher persona parameters, train attention matrices, explore active semantic memories.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Default.ArrowForwardIos,
+                        contentDescription = "Navigate",
+                        tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+                        modifier = Modifier.size(14.dp)
+                    )
                 }
             }
         }
@@ -1028,8 +1118,10 @@ fun HomeScreen(
                                         .clip(CircleShape)
                                         .background(
                                             when (selectedLevel) {
-                                                "Beginner" -> Color(0xFF34D399).copy(alpha = 0.15f)
+                                                "Beginner" -> Color(0xFF10B981).copy(alpha = 0.15f)
+                                                "Elementary" -> Color(0xFF0D9488).copy(alpha = 0.15f)
                                                 "Intermediate" -> Color(0xFF3B82F6).copy(alpha = 0.15f)
+                                                "Upper Intermediate" -> Color(0xFF4F46E5).copy(alpha = 0.15f)
                                                 else -> Color(0xFF8B5CF6).copy(alpha = 0.15f)
                                             }
                                         ),
@@ -1038,13 +1130,17 @@ fun HomeScreen(
                                     Icon(
                                         imageVector = when (selectedLevel) {
                                             "Beginner" -> Icons.Default.StarBorder
-                                            "Intermediate" -> Icons.Default.StarHalf
-                                            else -> Icons.Default.Star
+                                            "Elementary" -> Icons.Default.StarHalf
+                                            "Intermediate" -> Icons.Default.Star
+                                            "Upper Intermediate" -> Icons.Default.Stars
+                                            else -> Icons.Default.EmojiEvents
                                         },
                                         contentDescription = "Proficiency Icon",
                                         tint = when (selectedLevel) {
                                             "Beginner" -> Color(0xFF10B981)
+                                            "Elementary" -> Color(0xFF0D9488)
                                             "Intermediate" -> Color(0xFF3B82F6)
+                                            "Upper Intermediate" -> Color(0xFF4F46E5)
                                             else -> Color(0xFF8B5CF6)
                                         },
                                         modifier = Modifier.size(22.dp)
@@ -1059,9 +1155,11 @@ fun HomeScreen(
                                     )
                                     Text(
                                         text = when (selectedLevel) {
-                                            "Beginner" -> "Simple words, slower conversations"
-                                            "Intermediate" -> "Natural speed, everyday topics"
-                                            else -> "Advanced idioms, complex ideas"
+                                            "Beginner" -> "A1 - Simple words, slow pacing"
+                                            "Elementary" -> "A2 - Daily topics, clear expressions"
+                                            "Intermediate" -> "B1 - Practical usage, natural conversation"
+                                            "Upper Intermediate" -> "B2 - Fluent talks, professional themes"
+                                            else -> "C1-C2 - Native nuance, complex topics"
                                         },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1096,8 +1194,10 @@ fun HomeScreen(
                                         Icon(
                                             imageVector = when (level) {
                                                 "Beginner" -> Icons.Default.StarBorder
-                                                "Intermediate" -> Icons.Default.StarHalf
-                                                else -> Icons.Default.Star
+                                                "Elementary" -> Icons.Default.StarHalf
+                                                "Intermediate" -> Icons.Default.Star
+                                                "Upper Intermediate" -> Icons.Default.Stars
+                                                else -> Icons.Default.EmojiEvents
                                             },
                                             contentDescription = null,
                                             tint = if (selectedLevel == level) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1113,8 +1213,10 @@ fun HomeScreen(
                                             )
                                             Text(
                                                 text = when (level) {
-                                                    "Beginner" -> "A1-A2 level English"
-                                                    "Intermediate" -> "B1-B2 level English"
+                                                    "Beginner" -> "A1 level English"
+                                                    "Elementary" -> "A2 level English"
+                                                    "Intermediate" -> "B1 level English"
+                                                    "Upper Intermediate" -> "B2 level English"
                                                     else -> "C1-C2 level English"
                                                 },
                                                 style = MaterialTheme.typography.labelSmall,
@@ -4553,6 +4655,56 @@ fun SettingsScreen(
                                 )
                             )
                         }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Web Speech API toggle
+                        val useWebSpeechAPI by viewModel.useWebSpeechAPI.collectAsState()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.updateUseWebSpeechAPI(!useWebSpeechAPI)
+                                },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(if (isDark) Color(0x1A3B82F6) else Color(0xFFEFF6FF)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Mic, 
+                                        contentDescription = null, 
+                                        tint = Color(0xFF3B82F6), 
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text("Web Speech API Engine", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+                                    Text("Browser-backed cloud speech recognition (Recommended)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                                }
+                            }
+                            Switch(
+                                checked = useWebSpeechAPI,
+                                onCheckedChange = {
+                                    viewModel.updateUseWebSpeechAPI(it)
+                                },
+                                modifier = Modifier.testTag("setting_webspeech_switch"),
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = Color(0xFF8B5CF6)
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -6408,5 +6560,903 @@ fun PronunciationCoachDialog(
         },
         dismissButton = {}
     )
+}
+
+// ==========================================
+// 6. AI AGENT & MEMORY STUDIO
+// ==========================================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AgentStudioScreen(
+    viewModel: TutorViewModel,
+    onBack: () -> Unit
+) {
+    val agentConfig by viewModel.agentConfig.collectAsState()
+    val memories by viewModel.allAgentMemories.collectAsState()
+    val trainingLogs by viewModel.allTrainingLogs.collectAsState()
+    val isTraining by viewModel.isTrainingAgent.collectAsState()
+    val trainingMessage by viewModel.trainingProgressMessage.collectAsState()
+    val attentionSentence by viewModel.selectedAttentionSentence.collectAsState()
+    val attentionMatrix by viewModel.attentionMatrix.collectAsState()
+
+    var activeTab by remember { mutableStateOf(0) }
+    val isDark = isSystemInDarkTheme()
+
+    // Form states for Persona
+    var selectedPersona by remember(agentConfig) { mutableStateOf(agentConfig.personaType) }
+    var baseInstructionOverride by remember(agentConfig) { mutableStateOf(agentConfig.baseInstructionOverride) }
+    var temperature by remember(agentConfig) { mutableStateOf(agentConfig.temperature) }
+
+    // State for manual memory entry
+    var manualFactCategory by remember { mutableStateOf("Preference") }
+    var manualFactText by remember { mutableStateOf("") }
+
+    // State for training feedback
+    var trainingFeedback by remember { mutableStateOf("Emphasise conversational rhythm and native phrasal verbs.") }
+
+    // State for selected attention word
+    var selectedWordIndex by remember { mutableStateOf<Int?>(null) }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "AI Agent Studio",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF8B5CF6), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "ACTIVE",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 9.sp,
+                                    color = Color.White
+                                )
+                            )
+                        }
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack, modifier = Modifier.testTag("agent_studio_back")) {
+                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+                ),
+                modifier = Modifier.border(
+                    1.dp,
+                    if (isDark) Color(0x1AFFFFFF) else Color(0x1FFFFFFF),
+                    RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp)
+                )
+            )
+        },
+        containerColor = Color.Transparent
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp)
+        ) {
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Beautiful High-Tech Tab Bar
+            TabRow(
+                selectedTabIndex = activeTab,
+                containerColor = if (isDark) Color(0xFF131024) else Color(0xFFF1EEFA),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(
+                        1.dp,
+                        if (isDark) Color(0x1AFFFFFF) else Color(0x338B5CF6),
+                        RoundedCornerShape(16.dp)
+                    ),
+                indicator = { tabPositions ->
+                    TabRowDefaults.SecondaryIndicator(
+                        Modifier.tabIndicatorOffset(tabPositions[activeTab]),
+                        color = Color(0xFF8B5CF6),
+                        height = 3.dp
+                    )
+                },
+                divider = {}
+            ) {
+                Tab(
+                    selected = activeTab == 0,
+                    onClick = { activeTab = 0 },
+                    modifier = Modifier.testTag("tab_persona")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Face,
+                            contentDescription = "Persona",
+                            tint = if (activeTab == 0) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Persona",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (activeTab == 0) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+                Tab(
+                    selected = activeTab == 1,
+                    onClick = { activeTab = 1 },
+                    modifier = Modifier.testTag("tab_memories")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Psychology,
+                            contentDescription = "Memories",
+                            tint = if (activeTab == 1) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Memories",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (activeTab == 1) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+                Tab(
+                    selected = activeTab == 2,
+                    onClick = { activeTab = 2 },
+                    modifier = Modifier.testTag("tab_transformer")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Analytics,
+                            contentDescription = "Transformer Lab",
+                            tint = if (activeTab == 2) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Transformer Lab",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (activeTab == 2) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Tab Contents
+            Box(modifier = Modifier.weight(1f)) {
+                when (activeTab) {
+                    0 -> {
+                        // TAB 0: Persona Settings Screen
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            contentPadding = PaddingValues(bottom = 24.dp)
+                        ) {
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(24.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    border = BorderStroke(1.dp, if (isDark) Color(0x1AFFFFFF) else Color(0x1F8B5CF6))
+                                ) {
+                                    Column(modifier = Modifier.padding(20.dp)) {
+                                        Text(
+                                            text = "Profile Persona Type",
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = Color(0xFF8B5CF6)
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+
+                                        val personas = listOf(
+                                            "Balanced Teacher",
+                                            "Strict English Coach",
+                                            "Duolingo Friend",
+                                            "IELTS Examiner",
+                                            "Casual Native Speaker"
+                                        )
+
+                                        personas.forEach { p ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable { selectedPersona = p }
+                                                    .padding(vertical = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                RadioButton(
+                                                    selected = selectedPersona == p,
+                                                    onClick = { selectedPersona = p }
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    text = p,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(24.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    border = BorderStroke(1.dp, if (isDark) Color(0x1AFFFFFF) else Color(0x1F8B5CF6))
+                                ) {
+                                    Column(modifier = Modifier.padding(20.dp)) {
+                                        Text(
+                                            text = "Model Generation Temperature",
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = Color(0xFF8B5CF6)
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "Higher values cause more creative, wordy responses; lower values enforce concise structure.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        )
+                                        Spacer(modifier = Modifier.height(16.dp))
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Slider(
+                                                value = temperature,
+                                                onValueChange = { temperature = it },
+                                                valueRange = 0.1f..1.5f,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Spacer(modifier = Modifier.width(16.dp))
+                                            Text(
+                                                text = String.format("%.2f", temperature),
+                                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                                color = Color(0xFF8B5CF6)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(24.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    border = BorderStroke(1.dp, if (isDark) Color(0x1AFFFFFF) else Color(0x1F8B5CF6))
+                                ) {
+                                    Column(modifier = Modifier.padding(20.dp)) {
+                                        Text(
+                                            text = "System Directive Instruction Override",
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = Color(0xFF8B5CF6)
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+
+                                        OutlinedTextField(
+                                            value = baseInstructionOverride,
+                                            onValueChange = { baseInstructionOverride = it },
+                                            placeholder = { Text("E.g., Speak with a mild Scottish accent and introduce 2 phrasal verbs per sentence.") },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(100.dp),
+                                            shape = RoundedCornerShape(12.dp),
+                                            textStyle = MaterialTheme.typography.bodyMedium
+                                        )
+                                    }
+                                }
+                            }
+
+                            item {
+                                Button(
+                                    onClick = {
+                                        viewModel.updateAgentConfig(
+                                            agentConfig.copy(
+                                                personaType = selectedPersona,
+                                                baseInstructionOverride = baseInstructionOverride,
+                                                temperature = temperature
+                                            )
+                                        )
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(56.dp)
+                                        .testTag("btn_save_persona"),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
+                                    shape = RoundedCornerShape(16.dp)
+                                ) {
+                                    Icon(imageVector = Icons.Default.Save, contentDescription = "Save")
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Apply & Save Agent Profile",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    1 -> {
+                        // TAB 1: Semantic Memory Vault
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            contentPadding = PaddingValues(bottom = 24.dp)
+                        ) {
+                            // Memory Stats Banner
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(24.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    border = BorderStroke(1.dp, if (isDark) Color(0x1AFFFFFF) else Color(0x1F8B5CF6))
+                                ) {
+                                    Column(modifier = Modifier.padding(20.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column {
+                                                Text(
+                                                    text = "Semantic Memory Index",
+                                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                                    color = Color(0xFF8B5CF6)
+                                                )
+                                                Text(
+                                                    text = "${memories.size} Active context facts loaded",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = { viewModel.clearAllMemories() },
+                                                modifier = Modifier.testTag("btn_clear_memories")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = "Clear all",
+                                                    tint = Color.Red
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            text = "Memories are harvested automatically in the background as you talk to detect names, preferences, interests, and grammar errors you struggle with.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Manual Fact Injection Box
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(24.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    border = BorderStroke(1.dp, if (isDark) Color(0x1AFFFFFF) else Color(0x1F8B5CF6))
+                                ) {
+                                    Column(modifier = Modifier.padding(20.dp)) {
+                                        Text(
+                                            text = "Inject Custom Memory Fact",
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = Color(0xFF8B5CF6)
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+
+                                        // Category picker
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            listOf("Personal", "Interest", "Preference", "Grammar Bug").forEach { cat ->
+                                                val isSelected = manualFactCategory == cat
+                                                Box(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .background(if (isSelected) Color(0xFF8B5CF6) else if (isDark) Color(0x1AFFFFFF) else Color(0xFFEDE9FE))
+                                                        .clickable { manualFactCategory = cat }
+                                                        .padding(vertical = 8.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = cat,
+                                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                        color = if (isSelected) Color.White else if (isDark) Color.White.copy(alpha = 0.6f) else Color(0xFF8B5CF6)
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(12.dp))
+
+                                        OutlinedTextField(
+                                            value = manualFactText,
+                                            onValueChange = { manualFactText = it },
+                                            placeholder = { Text("E.g., Student wants to learn British Slang.") },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(12.dp),
+                                            textStyle = MaterialTheme.typography.bodyMedium
+                                        )
+
+                                        Spacer(modifier = Modifier.height(12.dp))
+
+                                        Button(
+                                            onClick = {
+                                                if (manualFactText.trim().isNotEmpty()) {
+                                                    viewModel.addAgentMemory(manualFactCategory, manualFactText.trim())
+                                                    manualFactText = ""
+                                                }
+                                            },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .testTag("btn_inject_fact"),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
+                                            shape = RoundedCornerShape(12.dp)
+                                        ) {
+                                            Icon(imageVector = Icons.Default.Add, contentDescription = "Add")
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Inject into Vector DB", fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Memory list
+                            if (memories.isEmpty()) {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(32.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "No memory nodes found. Start speaking to build memories!",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                                        )
+                                    }
+                                }
+                            } else {
+                                items(memories) { memory ->
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(16.dp),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                        border = BorderStroke(1.dp, if (isDark) Color(0x10FFFFFF) else Color(0x338B5CF6))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(16.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .background(
+                                                                when (memory.category) {
+                                                                    "Personal" -> Color(0xFF3B82F6)
+                                                                    "Interest" -> Color(0xFF10B981)
+                                                                    "Grammar Bug" -> Color(0xFFEF4444)
+                                                                    else -> Color(0xFF8B5CF6)
+                                                                },
+                                                                RoundedCornerShape(6.dp)
+                                                            )
+                                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = memory.category.uppercase(),
+                                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                                fontWeight = FontWeight.Bold,
+                                                                fontSize = 8.sp,
+                                                                color = Color.White
+                                                            )
+                                                        )
+                                                    }
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Text(
+                                                        text = "W: ${memory.weight}",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Text(
+                                                    text = memory.fact,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = { viewModel.deleteAgentMemory(memory.id) },
+                                                modifier = Modifier.testTag("delete_memory_${memory.id}")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = "Delete",
+                                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    2 -> {
+                        // TAB 2: Transformer Lab (Attention Map & Training Logs Canvas)
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            contentPadding = PaddingValues(bottom = 24.dp)
+                        ) {
+                            // Backpropagation Simulator Card
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(24.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    border = BorderStroke(1.dp, if (isDark) Color(0x1AFFFFFF) else Color(0x1F8B5CF6))
+                                ) {
+                                    Column(modifier = Modifier.padding(20.dp)) {
+                                        Text(
+                                            text = "Backpropagation Gradient Descent",
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = Color(0xFF8B5CF6)
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "Optimize multi-head attention scores by propagating student feedback gradients directly through weights.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+
+                                        OutlinedTextField(
+                                            value = trainingFeedback,
+                                            onValueChange = { trainingFeedback = it },
+                                            placeholder = { Text("Write training guidance...") },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(12.dp),
+                                            textStyle = MaterialTheme.typography.bodyMedium
+                                        )
+
+                                        Spacer(modifier = Modifier.height(12.dp))
+
+                                        if (isTraining) {
+                                            Column(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalAlignment = Alignment.CenterHorizontally
+                                            ) {
+                                                CircularProgressIndicator(color = Color(0xFF8B5CF6))
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                Text(
+                                                    text = trainingMessage,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = Color(0xFF8B5CF6),
+                                                    textAlign = TextAlign.Center
+                                                )
+                                            }
+                                        } else {
+                                            Button(
+                                                onClick = {
+                                                    if (trainingFeedback.trim().isNotEmpty()) {
+                                                        viewModel.trainAgent(trainingFeedback.trim()) {}
+                                                    }
+                                                },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .testTag("btn_train_gradient"),
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
+                                                shape = RoundedCornerShape(12.dp)
+                                            ) {
+                                                Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Train")
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("Optimize Attention Weights", fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Dynamic Live Line Graph Canvas (Loss curve vs. Accuracy)
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(24.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    border = BorderStroke(1.dp, if (isDark) Color(0x1AFFFFFF) else Color(0x1F8B5CF6))
+                                ) {
+                                    Column(modifier = Modifier.padding(20.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column {
+                                                Text(
+                                                    text = "Training Optimization History",
+                                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                                    color = Color(0xFF8B5CF6)
+                                                )
+                                                Text(
+                                                    text = "${trainingLogs.size} optimizer gradient steps tracked",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                                )
+                                            }
+                                            IconButton(onClick = { viewModel.clearAllTrainingLogs() }) {
+                                                Icon(imageVector = Icons.Default.Delete, contentDescription = "Clear logs", tint = Color.Red.copy(alpha = 0.6f))
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(16.dp))
+
+                                        // Dynamic Graph
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(160.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(if (isDark) Color(0xFF131024) else Color(0xFFF3EEFA))
+                                                .border(1.dp, if (isDark) Color(0x1AFFFFFF) else Color(0xFFE5DEFF), RoundedCornerShape(12.dp))
+                                                .padding(12.dp)
+                                        ) {
+                                            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                                                val width = size.width
+                                                val height = size.height
+
+                                                // Draw grid lines
+                                                val gridLines = 4
+                                                for (i in 0..gridLines) {
+                                                    val y = (height / gridLines) * i
+                                                    drawLine(
+                                                        color = if (isDark) Color(0x10FFFFFF) else Color(0x108B5CF6),
+                                                        start = androidx.compose.ui.geometry.Offset(0f, y),
+                                                        end = androidx.compose.ui.geometry.Offset(width, y),
+                                                        strokeWidth = 1f
+                                                    )
+                                                }
+
+                                                if (trainingLogs.size >= 2) {
+                                                    val maxEpoch = trainingLogs.size.toFloat()
+                                                    val pointsLoss = mutableListOf<androidx.compose.ui.geometry.Offset>()
+                                                    val pointsAcc = mutableListOf<androidx.compose.ui.geometry.Offset>()
+
+                                                    trainingLogs.forEachIndexed { idx, log ->
+                                                        val x = (width / (trainingLogs.size - 1)) * idx
+                                                        // Map Loss (0..1.5) to Height
+                                                        val yLoss = height - ((log.loss / 1.5f) * height).coerceIn(0f, height)
+                                                        // Map Accuracy (0..1) to Height
+                                                        val yAcc = height - (log.accuracy * height).coerceIn(0f, height)
+
+                                                        pointsLoss.add(androidx.compose.ui.geometry.Offset(x, yLoss))
+                                                        pointsAcc.add(androidx.compose.ui.geometry.Offset(x, yAcc))
+                                                    }
+
+                                                    // Draw lines
+                                                    for (i in 0 until pointsLoss.size - 1) {
+                                                        drawLine(
+                                                            color = Color(0xFFEF4444),
+                                                            start = pointsLoss[i],
+                                                            end = pointsLoss[i + 1],
+                                                            strokeWidth = 3f
+                                                        )
+                                                        drawLine(
+                                                            color = Color(0xFF10B981),
+                                                            start = pointsAcc[i],
+                                                            end = pointsAcc[i + 1],
+                                                            strokeWidth = 3f
+                                                        )
+                                                    }
+                                                } else {
+                                                    // Draw placeholder baseline lines
+                                                    drawLine(
+                                                        color = Color(0xFFEF4444).copy(alpha = 0.5f),
+                                                        start = androidx.compose.ui.geometry.Offset(0f, height * 0.4f),
+                                                        end = androidx.compose.ui.geometry.Offset(width, height * 0.6f),
+                                                        strokeWidth = 2f
+                                                    )
+                                                    drawLine(
+                                                        color = Color(0xFF10B981).copy(alpha = 0.5f),
+                                                        start = androidx.compose.ui.geometry.Offset(0f, height * 0.7f),
+                                                        end = androidx.compose.ui.geometry.Offset(width, height * 0.5f),
+                                                        strokeWidth = 2f
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(12.dp))
+
+                                        // Legends
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.Center,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFEF4444)))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Loss Rate", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                            Spacer(modifier = Modifier.width(20.dp))
+                                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF10B981)))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Tuned Accuracy", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Interactive 2D Multi-Head Self-Attention Score Matrix
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(24.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    border = BorderStroke(1.dp, if (isDark) Color(0x1AFFFFFF) else Color(0x1F8B5CF6))
+                                ) {
+                                    Column(modifier = Modifier.padding(20.dp)) {
+                                        Text(
+                                            text = "Transformer Self-Attention Matrix",
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = Color(0xFF8B5CF6)
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "Click a word to isolate its semantic relation weights against other tokens in the sentence.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        )
+                                        Spacer(modifier = Modifier.height(16.dp))
+
+                                        // Sentence Selector buttons
+                                        val sentences = listOf(
+                                            "I love practicing conversational English with my friendly AI teacher.",
+                                            "Messi is definitely the absolute greatest football player in history.",
+                                            "Grammar corrections help me write clean professional business reports."
+                                        )
+
+                                        sentences.forEach { sent ->
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 4.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(if (attentionSentence == sent) Color(0xFF8B5CF6).copy(alpha = 0.15f) else Color.Transparent)
+                                                    .clickable { viewModel.selectAttentionSentence(sent) }
+                                                    .padding(8.dp)
+                                            ) {
+                                                Text(
+                                                    text = sent,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = if (attentionSentence == sent) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                                    fontWeight = if (attentionSentence == sent) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(16.dp))
+
+                                        // 2D Heatmap Grid
+                                        val words = attentionSentence.split(" ").filter { it.isNotEmpty() }
+                                        if (words.isNotEmpty() && attentionMatrix.size == words.size) {
+                                            Column(modifier = Modifier.fillMaxWidth()) {
+                                                // Column headers (words)
+                                                Row(modifier = Modifier.fillMaxWidth()) {
+                                                    Spacer(modifier = Modifier.width(56.dp)) // space for row label
+                                                    words.forEach { w ->
+                                                        val trimmed = if (w.length > 4) w.take(3) + ".." else w
+                                                        Text(
+                                                            text = trimmed,
+                                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.sp, fontWeight = FontWeight.Bold),
+                                                            modifier = Modifier.weight(1f),
+                                                            textAlign = TextAlign.Center,
+                                                            maxLines = 1,
+                                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                                        )
+                                                    }
+                                                }
+
+                                                Spacer(modifier = Modifier.height(6.dp))
+
+                                                // Grid Rows
+                                                words.forEachIndexed { rIdx, rowWord ->
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(vertical = 2.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        // Row Label
+                                                        val rowTrimmed = if (rowWord.length > 7) rowWord.take(5) + ".." else rowWord
+                                                        Text(
+                                                            text = rowTrimmed,
+                                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, fontWeight = FontWeight.Bold),
+                                                            modifier = Modifier
+                                                                .width(56.dp)
+                                                                .clickable {
+                                                                    selectedWordIndex = if (selectedWordIndex == rIdx) null else rIdx
+                                                                },
+                                                            maxLines = 1,
+                                                            color = if (selectedWordIndex == rIdx) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.onSurface
+                                                        )
+
+                                                        // Matrix cells
+                                                        words.forEachIndexed { cIdx, colWord ->
+                                                            val cellValue = attentionMatrix[rIdx][cIdx]
+                                                            val baseColor = Color(0xFF8B5CF6)
+                                                            val isHighlight = selectedWordIndex == null || selectedWordIndex == rIdx
+                                                            val cellColor = if (isHighlight) {
+                                                                baseColor.copy(alpha = cellValue)
+                                                            } else {
+                                                                baseColor.copy(alpha = cellValue * 0.15f)
+                                                            }
+
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .weight(1f)
+                                                                    .aspectRatio(1f)
+                                                                    .padding(1.dp)
+                                                                    .clip(RoundedCornerShape(4.dp))
+                                                                    .background(cellColor)
+                                                                    .border(
+                                                                        1.dp,
+                                                                        if (selectedWordIndex == rIdx) Color(0xFFFF007F).copy(alpha = 0.5f) else Color.Transparent,
+                                                                        RoundedCornerShape(4.dp)
+                                                                    )
+                                                                    .clickable {
+                                                                        selectedWordIndex = if (selectedWordIndex == rIdx) null else rIdx
+                                                                    },
+                                                                contentAlignment = Alignment.Center
+                                                            ) {
+                                                                if (cellValue > 0.40f && words.size < 12) {
+                                                                    Text(
+                                                                        text = String.format("%.1f", cellValue),
+                                                                        style = MaterialTheme.typography.labelSmall.copy(
+                                                                            fontSize = 6.sp,
+                                                                            fontWeight = FontWeight.ExtraBold,
+                                                                            color = if (cellValue > 0.65f) Color.White else Color.Black
+                                                                        )
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 

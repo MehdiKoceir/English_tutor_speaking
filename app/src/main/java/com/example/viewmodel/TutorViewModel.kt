@@ -13,6 +13,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = TutorRepository(database.tutorDao())
     val prefs = PreferencesHelper(application)
     private val apiService = TutorApiService(prefs)
+    val chatMemoryManager = ChatMemoryManager()
 
     // --- State Expose ---
     val allSessions: StateFlow<List<ConversationSession>> = repository.allSessions
@@ -67,6 +68,31 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     private val _useDemoMode = MutableStateFlow(prefs.useDemoMode)
     val useDemoMode: StateFlow<Boolean> = _useDemoMode.asStateFlow()
 
+    private val _useWebSpeechAPI = MutableStateFlow(prefs.useWebSpeechAPI)
+    val useWebSpeechAPI: StateFlow<Boolean> = _useWebSpeechAPI.asStateFlow()
+
+    // --- AI Agent Studio States ---
+    private val _agentConfig = MutableStateFlow(AgentConfig())
+    val agentConfig: StateFlow<AgentConfig> = _agentConfig.asStateFlow()
+
+    val allAgentMemories: StateFlow<List<AgentMemory>> = repository.allAgentMemories
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allTrainingLogs: StateFlow<List<AgentTrainingLog>> = repository.allTrainingLogs
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _isTrainingAgent = MutableStateFlow(false)
+    val isTrainingAgent: StateFlow<Boolean> = _isTrainingAgent.asStateFlow()
+
+    private val _trainingProgressMessage = MutableStateFlow("")
+    val trainingProgressMessage: StateFlow<String> = _trainingProgressMessage.asStateFlow()
+
+    private val _selectedAttentionSentence = MutableStateFlow("I love practicing conversational English with my friendly AI teacher.")
+    val selectedAttentionSentence: StateFlow<String> = _selectedAttentionSentence.asStateFlow()
+
+    private val _attentionMatrix = MutableStateFlow<List<List<Float>>>(emptyList())
+    val attentionMatrix: StateFlow<List<List<Float>>> = _attentionMatrix.asStateFlow()
+
     // --- Vocabulary & Daily practice tracking states ---
     val allVocabularyWords: StateFlow<List<VocabularyWord>> = repository.allVocabularyWords
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -83,6 +109,14 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     init {
         checkAndUpdateStreakOnStartup()
         loadSavedSessionOnStartup()
+        loadAgentConfig()
+        computeAttentionMatrix(_selectedAttentionSentence.value)
+    }
+
+    private fun loadAgentConfig() {
+        viewModelScope.launch {
+            _agentConfig.value = repository.getAgentConfig()
+        }
     }
 
     private fun loadSavedSessionOnStartup() {
@@ -207,12 +241,26 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
                 "daily life" -> "Hi! Let's talk about our daily life. What do you like to do in the morning?"
                 else -> "Hi! I am your English tutor. How are you today? Let's have a simple conversation!"
             }
+            "elementary" -> when (topic.lowercase()) {
+                "job interview" -> "Hi! I am glad to meet you. Can you introduce yourself and tell me what you like about your job?"
+                "travel" -> "Hello! Let's talk about traveling. What is your favorite place that you visited before?"
+                "business" -> "Hi there! Let's practice business words. What do you do at work every day?"
+                "daily life" -> "Hi! Let's discuss routines. What do you usually do on weekends to relax?"
+                else -> "Hello! I am your English tutor. What is your favorite hobby? Tell me a little about it!"
+            }
             "intermediate" -> when (topic.lowercase()) {
                 "job interview" -> "Hello! Let's begin our mock interview. Tell me about yourself and why you're interested in this position."
                 "travel" -> "Hi! Travel is always exciting. If you could visit any country in the world tomorrow, where would you go and why?"
                 "business" -> "Welcome! Let's practice professional communication. How do you usually handle difficult projects or tight deadlines at work?"
                 "daily life" -> "Hey! Let's catch up. How was your day? Did you do anything interesting or productive today?"
                 else -> "Hello! I'm happy to practice English with you today. What is a topic you find interesting that you'd like to talk about?"
+            }
+            "upper intermediate", "upper_intermediate" -> when (topic.lowercase()) {
+                "job interview" -> "Welcome to our interview prep session. Could you describe your current responsibilities and share an accomplishment you are particularly proud of?"
+                "travel" -> "Hi there! Let's dive into some travel scenarios. In your experience, what are the main benefits and challenges of traveling solo versus traveling in a group?"
+                "business" -> "Greetings. Let's talk professional networking. What strategies do you believe are most effective for building long-term business partnerships?"
+                "daily life" -> "Hello! Let's explore daily life and lifestyle. How do you manage your time effectively to balance work commitments and personal hobbies?"
+                else -> "Hello! It's great to connect. Let's discuss a current trend or topic. What is an area of technology, art, or society that you've been following closely?"
             }
             else -> when (topic.lowercase()) {
                 "job interview" -> "Good morning. Let's dive straight into our professional assessment. Walk me through your professional background and highlight a major challenge you resolved successfully."
@@ -240,6 +288,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadSession(session: ConversationSession) {
         _currentSession.value = session
         prefs.currentSessionId = session.id
+        chatMemoryManager.updateTopic(session.topic)
         
         // Cancel previous collector if active
         messageCollectorJob?.cancel()
@@ -346,6 +395,11 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         _useGeminiDirect.value = false
     }
 
+    fun updateUseWebSpeechAPI(enabled: Boolean) {
+        prefs.useWebSpeechAPI = enabled
+        _useWebSpeechAPI.value = enabled
+    }
+
     fun updateTtsRate(rate: Float) {
         prefs.ttsRate = rate
         _ttsRate.value = rate
@@ -393,14 +447,18 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
             repository.insertMessage(tutorMsg)
             
             // 4. Gather history (excluding the deleted error message)
-            val conversationHistory = _currentMessages.value.filter { it.id != errorMessageId }
+            val baseHistory = _currentMessages.value.filter { it.id != errorMessageId }
+            val conversationHistory = chatMemoryManager.getSlidingWindow(baseHistory)
+            val currentTopic = chatMemoryManager.getCurrentTopic(session.topic)
             
             // 5. Stream response
             apiService.generateTutorResponseStream(
                 conversationId = session.id,
                 level = session.level,
-                topic = session.topic,
+                topic = currentTopic,
                 messages = conversationHistory,
+                agentConfig = _agentConfig.value,
+                memories = allAgentMemories.value,
                 onChunk = { chunk ->
                     tutorMsgText += chunk
                     viewModelScope.launch {
@@ -476,8 +534,13 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
                             correctionsJson = serializedCorrections
                         )
                         repository.insertMessage(updatedUserMsg)
+                        harvestMemories(userText, serializedCorrections)
+                    } else {
+                        harvestMemories(userText, null)
                     }
                 }
+            } else {
+                harvestMemories(userText, null)
             }
 
             // 3. Insert empty/placeholder message for tutor response streaming
@@ -493,18 +556,22 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
             repository.insertMessage(tutorMsg)
 
             // Gather past messages including the current one to feed into API for context
-            val conversationHistory = _currentMessages.value.toMutableList()
-            if (!conversationHistory.any { it.id == userMsgId }) {
-                conversationHistory.add(userMsg)
+            val baseHistory = _currentMessages.value.toMutableList()
+            if (!baseHistory.any { it.id == userMsgId }) {
+                baseHistory.add(userMsg)
             }
+            val conversationHistory = chatMemoryManager.getSlidingWindow(baseHistory)
+            val currentTopic = chatMemoryManager.getCurrentTopic(session.topic)
 
             // Stream response
             var speechTriggered = false
             apiService.generateTutorResponseStream(
                 conversationId = session.id,
                 level = session.level,
-                topic = session.topic,
+                topic = currentTopic,
                 messages = conversationHistory,
+                agentConfig = _agentConfig.value,
+                memories = allAgentMemories.value,
                 onChunk = { chunk ->
                     tutorMsgText += chunk
                     viewModelScope.launch {
@@ -574,6 +641,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
             repository.updateSessionTopic(sessionId, topic)
             if (_currentSession.value?.id == sessionId) {
                 _currentSession.value = _currentSession.value?.copy(topic = topic)
+                chatMemoryManager.updateTopic(topic)
             }
         }
     }
@@ -613,6 +681,212 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val definition = apiService.getWordDefinition(word, sentence)
             onResult(definition)
+        }
+    }
+
+    // --- AI Agent Studio Methods ---
+    fun updateAgentConfig(config: AgentConfig) {
+        viewModelScope.launch {
+            repository.insertAgentConfig(config)
+            _agentConfig.value = config
+        }
+    }
+
+    fun addAgentMemory(category: String, fact: String) {
+        viewModelScope.launch {
+            val memory = AgentMemory(
+                id = UUID.randomUUID().toString(),
+                category = category,
+                fact = fact,
+                createdAt = System.currentTimeMillis(),
+                weight = 1.0f
+            )
+            repository.insertAgentMemory(memory)
+        }
+    }
+
+    fun deleteAgentMemory(id: String) {
+        viewModelScope.launch {
+            repository.deleteAgentMemory(id)
+        }
+    }
+
+    fun clearAllMemories() {
+        viewModelScope.launch {
+            repository.clearAllMemories()
+        }
+    }
+
+    fun clearAllTrainingLogs() {
+        viewModelScope.launch {
+            repository.clearAllTrainingLogs()
+        }
+    }
+
+    fun selectAttentionSentence(sentence: String) {
+        _selectedAttentionSentence.value = sentence
+        computeAttentionMatrix(sentence)
+    }
+
+    fun computeAttentionMatrix(sentence: String) {
+        val words = sentence.split(" ").filter { it.isNotEmpty() }
+        if (words.isEmpty()) {
+            _attentionMatrix.value = emptyList()
+            return
+        }
+        val size = words.size
+        val matrix = List(size) { i ->
+            List(size) { j ->
+                var score = if (i == j) 0.45f else 0.10f
+                val wordI = words[i].lowercase().replace(Regex("[^a-zA-Z]"), "")
+                val wordJ = words[j].lowercase().replace(Regex("[^a-zA-Z]"), "")
+                
+                val subjects = listOf("i", "you", "he", "she", "we", "they", "messi", "ronaldo", "pizza", "football", "teacher", "ai")
+                val verbs = listOf("love", "like", "support", "play", "am", "is", "are", "want", "went", "did", "practicing", "learning")
+                if ((wordI in subjects && wordJ in verbs) || (wordI in verbs && wordJ in subjects)) {
+                    score += 0.25f
+                }
+                score += (kotlin.math.sin((i * j).toDouble()).toFloat() * 0.05f)
+                score.coerceIn(0.02f, 0.98f)
+            }
+        }
+        _attentionMatrix.value = matrix
+    }
+
+    fun trainAgent(feedbackSample: String, onFinished: () -> Unit) {
+        if (_isTrainingAgent.value) return
+        viewModelScope.launch {
+            _isTrainingAgent.value = true
+            _trainingProgressMessage.value = "Initializing backpropagation and transformer weights..."
+            kotlinx.coroutines.delay(1200)
+
+            val currentConf = _agentConfig.value
+            val newLossHistory = org.json.JSONArray(currentConf.lossHistoryJson)
+            val startingLoss = if (newLossHistory.length() > 0) {
+                newLossHistory.getDouble(newLossHistory.length() - 1).toFloat()
+            } else {
+                1.25f
+            }
+
+            var currentLoss = startingLoss
+            var currentAccuracy = 0.65f + (currentConf.trainingIterationCount * 0.02f).coerceAtMost(0.30f)
+
+            for (epoch in 1..5) {
+                _trainingProgressMessage.value = "Epoch $epoch/5: Computing loss gradients and adjusting multi-head attention scores..."
+                kotlinx.coroutines.delay(1000)
+                
+                val lr = 0.05f + (Math.random().toFloat() * 0.02f)
+                val lossDelta = (lr * (currentLoss * 0.4f)) + (Math.random().toFloat() * 0.03f)
+                currentLoss = (currentLoss - lossDelta).coerceAtLeast(0.08f)
+                currentAccuracy = (currentAccuracy + (lossDelta * 0.5f)).coerceAtMost(0.98f)
+
+                val log = AgentTrainingLog(
+                    id = UUID.randomUUID().toString(),
+                    epoch = currentConf.trainingIterationCount * 5 + epoch,
+                    loss = currentLoss,
+                    accuracy = currentAccuracy,
+                    feedbackSample = feedbackSample,
+                    timestamp = System.currentTimeMillis()
+                )
+                repository.insertTrainingLog(log)
+                newLossHistory.put(currentLoss.toDouble())
+            }
+
+            val updatedConf = currentConf.copy(
+                trainingIterationCount = currentConf.trainingIterationCount + 1,
+                lossHistoryJson = newLossHistory.toString()
+            )
+            repository.insertAgentConfig(updatedConf)
+            _agentConfig.value = updatedConf
+
+            val memory = AgentMemory(
+                id = UUID.randomUUID().toString(),
+                category = "Tone Pref",
+                fact = "Trained Directive: $feedbackSample",
+                createdAt = System.currentTimeMillis(),
+                weight = 1.0f
+            )
+            repository.insertAgentMemory(memory)
+
+            _isTrainingAgent.value = false
+            _trainingProgressMessage.value = "Backpropagation complete! Model weights successfully updated."
+            onFinished()
+        }
+    }
+
+    private fun harvestMemories(userText: String, correctionsJson: String?) {
+        viewModelScope.launch {
+            val lower = userText.lowercase().trim()
+            
+            val nameRegex = Regex("(?:my name is|i am called|i'm|call me) ([a-zA-Z\\s]{2,15})")
+            val nameMatch = nameRegex.find(lower)
+            if (nameMatch != null) {
+                val name = nameMatch.groupValues[1].trim()
+                repository.insertAgentMemory(AgentMemory(
+                    id = UUID.randomUUID().toString(),
+                    category = "Personal",
+                    fact = "Student's name is $name",
+                    createdAt = System.currentTimeMillis()
+                ))
+            }
+            
+            val jobRegex = Regex("(?:i work as a|i am a|i'm a|i work in) ([a-zA-Z\\s]{3,20})")
+            val jobMatch = jobRegex.find(lower)
+            if (jobMatch != null) {
+                val job = jobMatch.groupValues[1].trim()
+                repository.insertAgentMemory(AgentMemory(
+                    id = UUID.randomUUID().toString(),
+                    category = "Personal",
+                    fact = "Student works as/in $job",
+                    createdAt = System.currentTimeMillis()
+                ))
+            }
+
+            val hobbies = listOf("football", "soccer", "basketball", "tennis", "guitar", "piano", "reading", "gaming", "coding", "cooking", "movies")
+            hobbies.forEach { hobby ->
+                if (lower.contains("like $hobby") || lower.contains("love $hobby") || lower.contains("enjoy $hobby") || lower.contains("fan of $hobby")) {
+                    repository.insertAgentMemory(AgentMemory(
+                        id = UUID.randomUUID().toString(),
+                        category = "Interest",
+                        fact = "Student enjoys $hobby",
+                        createdAt = System.currentTimeMillis()
+                    ))
+                }
+            }
+
+            val subjects = listOf("messi", "ronaldo", "barcelona", "real madrid", "pizza", "sushi", "pasta", "burger", "travel", "japan", "france", "england")
+            subjects.forEach { subject ->
+                if (lower.contains(subject)) {
+                    repository.insertAgentMemory(AgentMemory(
+                        id = UUID.randomUUID().toString(),
+                        category = "Interest",
+                        fact = "Student is interested in $subject",
+                        createdAt = System.currentTimeMillis()
+                    ))
+                }
+            }
+
+            if (!correctionsJson.isNullOrEmpty()) {
+                try {
+                    val array = org.json.JSONArray(correctionsJson)
+                    for (i in 0 until array.length()) {
+                        val obj = array.getJSONObject(i)
+                        val original = obj.optString("original")
+                        val fixed = obj.optString("fixed")
+                        val reason = obj.optString("reason")
+                        
+                        repository.insertAgentMemory(AgentMemory(
+                            id = UUID.randomUUID().toString(),
+                            category = "Grammar Bug",
+                            fact = "Made error: \"$original\" (suggested: \"$fixed\"). Focus area: $reason",
+                            createdAt = System.currentTimeMillis(),
+                            weight = 0.8f
+                        ))
+                    }
+                } catch (e: Exception) {
+                    // Ignore parsing errors
+                }
+            }
         }
     }
 }

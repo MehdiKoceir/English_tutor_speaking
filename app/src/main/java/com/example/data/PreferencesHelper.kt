@@ -99,6 +99,10 @@ class PreferencesHelper(context: Context) {
         get() = prefs.getInt("daily_practice_goal_minutes", 10)
         set(value) = prefs.edit().putInt("daily_practice_goal_minutes", value).apply()
 
+    var useWebSpeechAPI: Boolean
+        get() = prefs.getBoolean("use_web_speech_api", true)
+        set(value) = prefs.edit().putBoolean("use_web_speech_api", value).apply()
+
     var dailyPracticedSeconds: Int
         get() {
             val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
