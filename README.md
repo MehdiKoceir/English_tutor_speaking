@@ -1,301 +1,136 @@
-# 📱 AhdrAnglais (أهدر Anglais)
+# English Tutor App
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Platform Android" />
-  <img src="https://img.shields.io/badge/Kotlin-1.9.0-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin Version" />
-  <img src="https://img.shields.io/badge/Jetpack_Compose-M3-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white" alt="Jetpack Compose" />
-  <img src="https://img.shields.io/badge/Database-Room_SQLite-005C84?style=for-the-badge&logo=sqlite&logoColor=white" alt="Room DB" />
-</p>
+A free, unlimited English conversation practice app. Chat by text or voice with an AI tutor that corrects your mistakes and keeps the conversation going — powered by a self-hosted open-source LLM (Ollama), so there's no per-token billing and no artificial daily usage cap.
 
-**AhdrAnglais** (Algerian-slang/Arabic word for *"Speak"* English) is a premium, offline-first, AI-driven language practice application designed for Android. It enables language learners to naturally practice English conversation with an intelligent virtual tutor, providing real-time audio transcriptions, detailed feedback, and dynamic progress metrics.
+## Why self-hosted instead of a paid API?
 
----
+Most AI language-learning apps rely on OpenAI/Gemini/Claude APIs, which means either a paywall or a daily token quota. This project runs its own LLM (via [Ollama](https://ollama.com)) on a personal VPS — free to use as much as you want, limited only by the server's own hardware, not by billing.
 
-## ✨ Features
-
-- 🎙️ **Real-Time Voice-To-Text Practice:** Uses advanced Android speech recognition capabilities (STT) for fluid speaking practice.
-- 🗣️ **Premium Text-To-Speech (TTS):** Highly customizable tutor voices featuring natural US, UK, CA, AU, or IN accent adjustments.
-- 🧠 **AI-Powered Feedback:** Instantly analyzes user input, correcting grammar, vocabulary, spelling, and phrasing errors.
-- 📂 **Session History & Outlines:** Persistent record of past conversations categorized by topics like *Free Talk, Job Interview, Travel, Daily Life,* or *Business*.
-- 📊 **Progress Analytics & Charts:** Custom progress visualization reflecting vocabulary expansion and grammatical accuracy over time.
-- 📚 **Personalized Word Banks:** Automatically extracts newly discovered words into a custom vocabulary explorer where they can be marked as learned.
-- 🔥 **Daily Streak Tracker:** Motivating streaks to ensure learners maintain consistency and discipline.
-
----
-
-## 📸 Screenshots & Visual Demonstrations
-
-> *Below are conceptual layout placeholders of the premium Material 3 Dark/Light user interface.*
-
-| 🚀 Explore Dashboard | 💬 Conversational Tutor | 📊 Progress & Analytics |
-|:---:|:---:|:---:|
-| <img src="https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80" width="240" alt="Dashboard" /> | <img src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=400&q=80" width="240" alt="Chat Workspace" /> | <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=400&q=80" width="240" alt="Charts screen" /> |
-
----
-
-## 🏗️ Architecture & Flow
-
-The application is structured following the official Android guidelines using the **MVVM (Model-View-ViewModel)** architectural pattern.
+## Architecture
 
 ```
-       ┌────────────────────────────────────────────────────────┐
-       │                       UI Layer                         │
-       │  [MainActivity] <─> [Screens.kt (Jetpack Compose M3)]  │
-       └───────────────────────────┬────────────────────────────┘
-                                   │
-                                   ▼
-       ┌────────────────────────────────────────────────────────┐
-       │                    ViewModel Layer                     │
-       │                   [TutorViewModel]                     │
-       └───────────────────────────┬────────────────────────────┘
-                                   │
-                    ┌──────────────┴──────────────┐
-                    ▼                             ▼
-       ┌────────────────────────┐    ┌────────────────────────┐
-       │    Repository Layer    │    │    API Service Layer   │
-       │    [TutorRepository]   │    │    [TutorApiService]   │
-       └────────────┬───────────┘    └────────────┬───────────┘
-                    │                             │
-                    ▼                             ▼
-       ┌────────────────────────┐    ┌────────────────────────┐
-       │      Local Storage     │    │   External Services    │
-       │   [Room SQLite DB]     │    │ [Gemini API / LLM Stream]│
-       └────────────────────────┘    └────────────────────────┘
+Flutter App (iOS/Android)
+    │  HTTPS + SSE streaming
+    ▼
+FastAPI Backend (VPS)
+    │  local HTTP calls
+    ▼
+Ollama (same VPS, self-hosted LLM)
 ```
 
----
+## Features
 
-## 🗄️ Database Schema
+- **Text & voice chat** — speak or type, the AI responds in kind (speech-to-text input, text-to-speech playback)
+- **Adjustable difficulty** — Beginner / Intermediate / Advanced
+- **Topic modes** — Free talk, Job interview, Travel, Daily life, Business
+- **Grammar correction** — inline correction chips with explanations, without breaking conversation flow
+- **Local history** — all conversations saved on-device, no account required
+- **Streaming responses** — AI replies appear live, token by token
 
-AhdrAnglais stores progress data locally using **Room Database** for absolute security and offline access.
+## Tech Stack
 
-### 1. `conversation_sessions`
-| Column Name | SQLite Data Type | Constraints | Description |
-|---|---|---|---|
-| `id` | `TEXT` | `PRIMARY KEY` | Unique Session UUID |
-| `level` | `TEXT` | `NOT NULL` | Learner English level (`beginner`, `intermediate`, `advanced`) |
-| `topic` | `TEXT` | `NOT NULL` | Session Topic (e.g. *Travel*, *Daily Life*, *Business*) |
-| `createdAt` | `INTEGER` | `NOT NULL` | Epoch timestamp (milliseconds) |
-| `summary` | `TEXT` | `NULL` | Summarized recap generated by AI |
+| Layer | Tech |
+|---|---|
+| Mobile app | Flutter (iOS + Android) |
+| State management | Provider / Riverpod |
+| Voice input | `speech_to_text` |
+| Voice output | `flutter_tts` |
+| Local storage | `sqflite` |
+| Secure storage | `flutter_secure_storage` |
+| Backend | Python, FastAPI |
+| LLM | Ollama (`llama3.1:8b` or `llama3.2:3b`) |
+| Deployment | Docker Compose on a VPS (Hetzner/OVH) |
 
-### 2. `chat_messages`
-| Column Name | SQLite Data Type | Constraints | Description |
-|---|---|---|---|
-| `id` | `TEXT` | `PRIMARY KEY` | Unique Message UUID |
-| `sessionId` | `TEXT` | `FOREIGN KEY` | References `conversation_sessions(id)` |
-| `sender` | `TEXT` | `NOT NULL` | Message speaker (`user` or `tutor`) |
-| `text` | `TEXT` | `NOT NULL` | Message transcription or textual payload |
-| `timestamp` | `INTEGER` | `NOT NULL` | Epoch timestamp (milliseconds) |
-| `correctedText`| `TEXT` | `NULL` | Grammar-corrected variant |
-| `correctionsJson`| `TEXT` | `NULL` | Detailed breakdown of corrections in JSON string |
+## Project Structure
 
-### 3. `vocabulary_words`
-| Column Name | SQLite Data Type | Constraints | Description |
-|---|---|---|---|
-| `word` | `TEXT` | `PRIMARY KEY` | Dictionary unique keyword |
-| `definition` | `TEXT` | `NOT NULL` | Detailed description or context meaning |
-| `exampleSentence`| `TEXT` | `NOT NULL` | Reference example of usage |
-| `createdAt` | `INTEGER` | `NOT NULL` | Added epoch timestamp |
-| `isLearned` | `INTEGER` | `NOT NULL` | Completion checkbox (`0` or `1`) |
-
-### 4. `daily_streaks`
-| Column Name | SQLite Data Type | Constraints | Description |
-|---|---|---|---|
-| `id` | `INTEGER` | `PRIMARY KEY` (value `1`) | Single-row state table |
-| `currentStreak`| `INTEGER` | `NOT NULL` | Active streak count |
-| `lastCompletedDate`| `TEXT` | `NOT NULL` | ISO date string (`yyyy-MM-dd`) |
-| `longestStreak`| `INTEGER` | `NOT NULL` | All-time highest record count |
-
----
-
-## 🔑 Environment Variables & API Configuration
-
-The application uses the standard **Secrets Gradle Plugin** to avoid hardcoding production credentials.
-
-Copy the `.env.example` file to `.env` in your project root, and populate it with your production token:
-
-```env
-GEMINI_API_KEY=your_gemini_api_token_here
+```
+english-tutor-app/
+├── backend/
+│   ├── main.py              # FastAPI app: /chat, /correct, /health
+│   ├── requirements.txt
+│   ├── docker-compose.yml   # Ollama + FastAPI together
+│   └── README.md            # backend-specific setup
+├── mobile/
+│   ├── lib/
+│   │   ├── screens/         # Home, Chat, History, Settings
+│   │   ├── services/        # API client, TTS/STT wrappers, local DB
+│   │   ├── models/
+│   │   └── main.dart
+│   └── pubspec.yaml
+└── README.md                 # this file
 ```
 
-### Accessing Secrets in Code
-The API token is securely injected into your `BuildConfig` variable:
+## Setup
 
-```kotlin
-val apiKey = BuildConfig.GEMINI_API_KEY
+### 1. Backend + Ollama (local dev)
+
+```bash
+ollama pull llama3.1:8b
+ollama list          # confirm it's installed
 ```
 
----
+Test Ollama directly:
+```bash
+curl http://localhost:11434/api/generate -d '{
+  "model": "llama3.1:8b",
+  "prompt": "Say hello in English",
+  "stream": false
+}'
+```
 
-## 🔌 API Documentation
+Run the backend:
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
 
-AhdrAnglais leverages two distinct API interfaces to support both direct Gemini-native connections and self-hosted model deployments:
+Set environment variables before running:
+```bash
+export API_KEY=your-secret-key
+export OLLAMA_MODEL=llama3.1:8b
+```
 
-### 1. Google Gemini API (Stream Generation)
-- **Endpoint:** `POST https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent`
-- **Headers:**
-  - `Content-Type: application/json`
-  - `X-API-Key: [GEMINI_API_KEY]`
-- **Request Body Outline:**
-  ```json
-  {
-    "contents": [
-      {
-        "role": "user",
-        "parts": [{ "text": "Student conversational input text" }]
-      }
-    ],
-    "systemInstruction": {
-      "parts": [{ "text": "[Detailed pedagogical instruction prompt containing proficiency adaptions]" }]
-    },
-    "generationConfig": {
-      "temperature": 0.7
-    }
-  }
-  ```
+### 2. Mobile app
 
-### 2. Structured Grammar Corrections API (Gemini Schema-Gated)
-- **Endpoint:** `POST https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`
-- **Headers:** Same as above.
-- **Request Body Outline:** Uses schema enforcement to guarantee structure-safe parsing in Android.
-  ```json
-  {
-    "contents": [
-      {
-        "parts": [{ "text": "[Precision analysis prompt] \"Student message to analyze\"" }]
-      }
-    ],
-    "generationConfig": {
-      "responseMimeType": "application/json",
-      "responseSchema": {
-        "type": "OBJECT",
-        "properties": {
-          "corrected": { "type": "STRING", "description": "Fully corrected, natural statement." },
-          "corrections": {
-            "type": "ARRAY",
-            "items": {
-              "type": "OBJECT",
-              "properties": {
-                "original": { "type": "STRING", "description": "Suboptimal segment." },
-                "fixed": { "type": "STRING", "description": "Corrected segment." },
-                "reason": { "type": "STRING", "description": "Short pedagogical rule." }
-              },
-              "required": ["original", "fixed", "reason"]
-            }
-          }
-        },
-        "required": ["corrected", "corrections"]
-      }
-    }
-  }
-  ```
+```bash
+cd mobile
+flutter pub get
+flutter run
+```
 
-### 3. Self-Hosted Custom VPS Endpoint (OpenAI / Ollama-compatible)
-- **Endpoint:** Customizable in Settings (`POST [CUSTOM_VPS_URL]/v1/chat/completions`)
-- **Headers:**
-  - `Content-Type: application/json`
-  - `Authorization: Bearer [VPS_API_KEY]`
-- **Response Format:** Handles both standard and Server-Sent Events (SSE) `text/event-stream` chunks seamlessly.
+In the app's **Settings** screen, set the backend URL:
+- Testing on the same PC's emulator: `http://10.0.2.2:8000` (Android emulator) or `http://localhost:8000` (iOS simulator)
+- Testing on a physical phone (same wifi): your PC's LAN IP, e.g. `http://192.168.1.42:8000` (find it with `ipconfig` on Windows)
+- Production: your VPS's domain/IP
 
----
+And the API key matching `API_KEY` from the backend `.env`.
 
-## 🚢 Deployment
+### 3. Production deployment (VPS)
 
-Deploying AhdrAnglais to a production environment involves compiling a release-ready APK/AAB:
+```bash
+cd backend
+docker-compose up -d
+```
 
-1. **Generate signing keys:**
-   Use the Java Keytool to generate a secure Keystore if you don't have one:
-   ```bash
-   keytool -genkey -v -keystore release.keystore -alias ahdranglais -keyalg RSA -keysize 2048 -validity 10000
-   ```
-2. **Configure production signing:**
-   Populate signing parameters in a secure manner using your local configurations (never commit Keystores or passwords to git):
-   ```kotlin
-   signingConfigs {
-       create("release") {
-           storeFile = file("release.keystore")
-           storePassword = System.getenv("RELEASE_STORE_PASSWORD")
-           keyAlias = System.getenv("RELEASE_KEY_ALIAS")
-           keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
-       }
-   }
-   ```
-3. **Assemble Bundle or APK:**
-   Execute clean compilation to build either universal APKs or localized Android App Bundles:
-   ```bash
-   # Build Bundle (Recommended for Google Play distribution)
-   ./gradlew :app:bundleRelease
-   
-   # Build APK (Recommended for fast manual distribution)
-   ./gradlew :app:assembleRelease
-   ```
+This starts Ollama and the FastAPI backend together. Make sure to:
+- Pull the model inside the container on first run (`docker exec -it <ollama_container> ollama pull llama3.1:8b`)
+- Set a strong `API_KEY`
+- Put a reverse proxy (Caddy/Nginx) with HTTPS in front of the FastAPI backend before exposing it publicly
 
----
+## Roadmap / Ideas
 
-## 🛠️ Installation
+- [ ] Pronunciation scoring
+- [ ] Daily streak / practice reminders (optional, kept non-gamified)
+- [ ] Export conversation history
+- [ ] Multi-language support beyond English
 
-### Prerequisites
-- **Android Studio** (Koala | Jellyfish or higher)
-- **Android SDK Platform** 34+
-- **JDK 17** configured in Gradle build settings
+## License
 
-### Step-by-Step Setup
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/koceirmehdi/AhdrAnglais.git
-   cd AhdrAnglais
-   ```
-2. **Apply API Secrets:**
-   Create a `.env` file in the project root with your Google AI Studio credentials.
-3. **Open and Synchronize Gradle:**
-   Open the root directory in Android Studio. Wait for the automatic Gradle configuration to finish.
-4. **Compile the Applet:**
-   Run the build directly to target your connected Android device or standard emulator:
-   ```bash
-   ./gradlew assembleDebug
-   ```
+Personal/portfolio project.
 
----
-
-## 🧪 Testing
-
-AhdrAnglais contains comprehensive JVM and UI checks built with **Robolectric** and **Roborazzi**:
-
-- **Run Standard JVM Tests:**
-  ```bash
-  ./gradlew :app:testDebugUnitTest
-  ```
-- **Record Reference Screenshots:**
-  ```bash
-  ./gradlew :app:recordRoborazziDebug
-  ```
-- **Verify UI Screenshots against Reference Images:**
-  ```bash
-  ./gradlew :app:verifyRoborazziDebug
-  ```
-
----
-
-## 🛣️ Future Enhancements
-
-- 📈 **Dynamic CEFR Assessment Reports:** Export vocabulary logs and historical grammar accuracy as printable PDF or CSV files.
-- 🌍 **Linguistic Support Integration:** Provide localized translation overlays and vocabulary hints directly in the conversational space.
-- 🗣️ **Detailed Pronunciation Evaluation:** Integrated syllable and phoneme-level checks utilizing real-time sound frequencies.
-
----
-
-## 📄 License
-
-Distributed under the **MIT License**. Check out `LICENSE` for more detailed information.
-
----
-
-## 🤝 Contributing
-
-Contributions make the open-source community an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+<img width="1440" height="2560" alt="image" src="https://github.com/user-attachments/assets/4df63612-9362-48ec-82b5-aee9c95de317" />
+<img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/cc24529c-1f50-4e0c-bd3f-73b1977073ea" />
+<img width="2176" height="1632" alt="image" src="https://github.com/user-attachments/assets/07f69964-b4ee-4652-9b28-a290b03a1bad" />
+<img width="2176" height="1632" alt="image" src="https://github.com/user-attachments/assets/b328e209-5731-432d-b143-cf5c997d8807" />
+<img width="2176" height="1632" alt="image" src="https://github.com/user-attachments/assets/65321f6a-1581-4427-be47-eef4694aaf36" />
